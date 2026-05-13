@@ -61,6 +61,27 @@ function SetupStatusTab() {
           </div>
         )}
       </section>
+      
+      <section>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">3. Setup Pengingat (Cron Job)</h2>
+        <p className="mb-2 text-sm">Agar asisten AI dapat mengirim pesan pengingat sesuai jadwal (misalnya "besok pagi ingatkan saya"), Anda harus memicu cron URL ini setiap 1 menit. Anda dapat menggunakan layanan gratis seperti <a href="https://cron-job.org/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">cron-job.org</a>.</p>
+        <div className="bg-gray-100 p-3 rounded flex items-center justify-between border border-gray-200">
+          <code className="text-sm text-pink-600 break-all">{import.meta.env.VITE_APP_URL || window.location.origin}/api/cron</code>
+          <button 
+            onClick={() => navigator.clipboard.writeText(`${import.meta.env.VITE_APP_URL || window.location.origin}/api/cron`)}
+            className="ml-4 px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium transition-colors"
+          >
+            Copy URL
+          </button>
+        </div>
+        <ol className="list-decimal pl-5 mt-3 space-y-1 text-sm">
+          <li>Daftar/Login ke cron-job.org</li>
+          <li>Buat Cronjob baru (Create Cronjob)</li>
+          <li>Paste URL di atas ke kolom URL</li>
+          <li>Set jadwal eksekusi menjadi <b>Every 1 minute</b></li>
+          <li>Simpan, dan asisten Anda siap mengingatkan apapun secara otomatis!</li>
+        </ol>
+      </section>
     </div>
   );
 }

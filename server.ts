@@ -5,6 +5,7 @@ import webhookHandler from "./api/webhook";
 import statusHandler from "./api/status";
 import settingsHandler from "./api/settings";
 import contactsHandler from "./api/contacts";
+import cronHandler from "./api/cron";
 
 async function startServer() {
   const app = express();
@@ -23,6 +24,7 @@ async function startServer() {
   app.all("/api/settings", settingsHandler);
   app.all("/api/contacts", contactsHandler);
   app.all("/api/status", statusHandler);
+  app.all("/api/cron", cronHandler);
 
   // Webhook for Fonnte (WhatsApp) - works on both /api/webhook and /webhook
   app.all("/api/webhook", webhookHandler);

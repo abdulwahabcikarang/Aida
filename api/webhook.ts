@@ -78,9 +78,9 @@ export default async function handler(req: any, res: any) {
       knowledgeBase: ""
     };
     let contactData: any = {};
+    const db = getDb();
 
     try {
-      const db = getDb();
       // Fetch global settings
       const settingsDoc = await db.collection("settings").doc("global").get();
       if (settingsDoc.exists) {
@@ -111,37 +111,78 @@ export default async function handler(req: any, res: any) {
       finalSystemPrompt += `\n\n--- CATATAN TENTANG PENGGUNA INI ---\n${contactData.instruction}`;
     }
 
-    if (history.length === 0) {
-      history = [
-        {
-          role: "user",
-          parts: [{ text: finalSystemPrompt }]
-        },
-        {
-          role: "model",
-          parts: [{ text: "Siap! Aku akan membantu pengguna sesuai instruksi." }]
-        }
-      ];
-    } else {
-      // Update the very first message with the latest system prompt
-      if (history[0] && history[0].role === 'user') {
-        history[0].parts[0].text = finalSystemPrompt;
-      }
-    }
+    // Clean up history to ensure valid format for the API
+    let cleanHistory = history.filter(h => h.role === "user" || h.role === "model");
 
-    // Format chat prompt manually for Gemini 2.5 Flash
-    const formattedHistory = history.map(m => `${m.role === 'model' ? 'AIDA' : 'Sistem/Pengguna'}: ${m.parts[0].text}`).join('\n');
-    const prompt = formattedHistory + `\nPengguna: ${message}\nAIDA:`;
+    // Menambahkan Waktu Lokal Jakarta
+    const timeInJakarta = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+    const systemInstruction = `${finalSystemPrompt}\n\nWaktu saat ini (waktu Indonesia/Jakarta): ${timeInJakarta}. 
+Jika pengguna meminta untuk diingatkan di waktu tertentu (misalnya "jam 9 ingatkan saya tidur" atau "besok pagi ingatkan beli sayur"), kamu WAJIB menggunakan alat (tool) 'schedule_reminder' untuk mengatur pengingat tersebut. Setelah memanggil fungsi jadwal, balas dengan konfirmasi ramah ke pengguna.\n\nPENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
+
+    const aiConfig: any = {
+      temperature: globalSettings.creativity ?? 0.7,
+      systemInstruction: systemInstruction,
+      tools: [
+        {
+          functionDeclarations: [
+            {
+              name: "schedule_reminder",
+              description: "Jadwalkan pengingat yang akan dikirim secara otomatis ke nomor WhatsApp pengguna pada waktu tertentu.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  time_iso: {
+                    type: "STRING",
+                    description: "Waktu penjadwalan dalam format ISO 8601 (contoh: 2026-05-14T02:00:00Z). Ingat untuk mengkonversi waktu Jakarta (UTC+7) ke UTC jika formatnya merujuk ke Z."
+                  },
+                  reminder_message: {
+                    type: "STRING",
+                    description: "Pesan yang secara spesifik akan dikirimkan kepada pengguna sebagai pengingat."
+                  }
+                },
+                required: ["time_iso", "reminder_message"]
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    cleanHistory.push({ role: "user", parts: [{ text: message }] });
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        temperature: globalSettings.creativity ?? 0.7,
-      }
+      contents: cleanHistory,
+      config: aiConfig
     });
 
-    const reply = response.text || "Maaf, aku tidak bisa memproses permintaan itu saat ini.";
+    let reply = "";
+    if (response.functionCalls && response.functionCalls.length > 0) {
+      const call = response.functionCalls[0];
+      if (call.name === "schedule_reminder") {
+        const { time_iso, reminder_message } = call.args as any;
+        
+        try {
+          const targetTime = new Date(time_iso);
+          await db.collection("reminders").add({
+            sender: sender,
+            message: reminder_message,
+            time: targetTime,
+            status: "pending",
+            createdAt: FieldValue.serverTimestamp()
+          });
+
+          const localTime = targetTime.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+          reply = `Oke! Aku sudah mencatat pengingatnya. Aku akan mengingatkanmu pesan: "${reminder_message}" pada ${localTime}. 🕰️`;
+        } catch (e: any) {
+          console.error("Error setting reminder:", e);
+          reply = "Maaf, aku kesulitan mengatur waktu pengingat di sistem. Coba lagi dengan format yang lebih jelas ya.";
+        }
+      }
+    } else {
+      reply = response.text || "Maaf, aku tidak bisa memproses permintaan itu saat ini.";
+    }
+
     const limit = typeof globalSettings.maxMemory === 'number' ? globalSettings.maxMemory : 10;
 
     // Save to Firebase
@@ -151,10 +192,9 @@ export default async function handler(req: any, res: any) {
           sender,
           name: contactData.name || name || sender,
           history: [
-            ...history,
-            { role: "user", parts: [{ text: message }] },
+            ...cleanHistory,
             { role: "model", parts: [{ text: reply }] }
-          ].slice(-(limit + 2)), // Keep last 'limit' messages + the 2 root system messages
+          ].slice(-limit), // Batasi penyimpanan
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
@@ -172,7 +212,6 @@ export default async function handler(req: any, res: any) {
       body: JSON.stringify({
         target: sender,
         message: reply,
-        delay: "1" // delay in seconds (optional)
       })
     });
     
@@ -186,3 +225,4 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: "Internal Server Error", details: String(error) });
   }
 }
+
