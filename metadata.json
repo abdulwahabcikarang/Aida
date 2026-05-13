@@ -1,0 +1,6 @@
+{
+  "name": "WhatsApp AI Assistant",
+  "description": "A WhatsApp AI Assistant powered by Gemini, Fonnte, and Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
