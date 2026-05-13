@@ -45,11 +45,14 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { sender, message, name } = req.body;
+    const body = req.body || {};
+    const sender = body.sender;
+    const message = body.message || body.text;
+    const name = body.name;
 
     // Fonnte initial validation step
     if (!sender || !message) {
-      return res.status(200).json({ status: "ok", detail: "Payload received" });
+      return res.status(200).json({ status: "ok", detail: "Payload received but missing sender or message" });
     }
 
     if (!ai) {
@@ -64,17 +67,18 @@ export default async function handler(req: any, res: any) {
       throw new Error("FONNTE_TOKEN is required");
     }
 
-    const db = getDb();
-    const chatRef = db.collection("chats").doc(sender);
-    
     let history: { role: string; parts: { text: string }[] }[] = [];
+    let chatRef: any = null;
+
     try {
+      const db = getDb();
+      chatRef = db.collection("chats").doc(sender);
       const chatDoc = await chatRef.get();
       if (chatDoc.exists) {
         history = chatDoc.data()?.history || [];
       }
     } catch (e) {
-      console.error("Firebase read error (proceeding without history):", e);
+      console.error("Firebase is not configured properly or failed to read (proceeding without history):", e);
     }
     
     // Default system prompt
@@ -103,16 +107,18 @@ export default async function handler(req: any, res: any) {
 
     // Save to Firebase
     try {
-      await chatRef.set({
-        sender,
-        name: name || sender,
-        history: [
-          ...history,
-          { role: "user", parts: [{ text: message }] },
-          { role: "model", parts: [{ text: reply }] }
-        ].slice(-10), // Keep last 10 messages
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
+      if (chatRef) {
+        await chatRef.set({
+          sender,
+          name: name || sender,
+          history: [
+            ...history,
+            { role: "user", parts: [{ text: message }] },
+            { role: "model", parts: [{ text: reply }] }
+          ].slice(-10), // Keep last 10 messages
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
     } catch (e) {
       console.error("Firebase write error:", e);
     }
