@@ -1,11 +1,29 @@
+import { useState } from 'react';
+
 export default function App() {
   const webhookUrl = `${import.meta.env.VITE_APP_URL || window.location.origin}/api/webhook`;
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const checkStatus = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      setStatus(data);
+    } catch (e: any) {
+      setStatus({ status: 'ERROR', error_detail: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4">
+      <div className="bg-white p-8 rounded-xl shadow-lg max-w-3xl w-full">
         <h1 className="text-3xl font-bold text-gray-900 mb-6 text-center">
-          🤖 WhatsApp AI Assistant
+          🤖 WhatsApp AI Assistant Dashboard
         </h1>
         
         <div className="space-y-6 text-gray-700">
@@ -40,6 +58,32 @@ export default function App() {
             <p className="mt-2 text-sm text-gray-500">
               Chat history is stored in your Firebase Firestore database automatically.
             </p>
+          </section>
+          <section>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">4. System Status Check</h2>
+            <p className="mb-4">Click the button below to text the connection between the deployment environment and Firebase/Firestore.</p>
+            <button 
+              onClick={checkStatus} 
+              disabled={loading}
+              className="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Checking...' : 'Check System Status'}
+            </button>
+
+            {status && (
+              <div className={`mt-4 p-4 rounded ${status.status === 'OK' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <h3 className={`font-bold ${status.status === 'OK' ? 'text-green-800' : 'text-red-800'}`}>
+                  {status.status === 'OK' ? '✅ System is Healthy' : '❌ System Error'}
+                </h3>
+                <p className="text-sm mt-1 mb-2 font-mono">Firebase: {status.firebase || status.status}</p>
+                {status.info && <p className="text-sm">{status.info}</p>}
+                {status.error_detail && (
+                  <pre className="mt-2 text-xs bg-red-100 p-2 rounded overflow-auto text-red-900 border border-red-200">
+                    {status.error_detail}
+                  </pre>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </div>

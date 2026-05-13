@@ -1,12 +1,14 @@
-import * as admin from "firebase-admin";
+import * as adminImport from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+
+const admin = adminImport.default || adminImport;
 
 let _db: FirebaseFirestore.Firestore | null = null;
 
 function getDb() {
   if (_db) return _db;
   
-  if (!admin.apps.length) {
+  if (!admin.apps?.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       // Used in Vercel - Needs Private Key JSON
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);

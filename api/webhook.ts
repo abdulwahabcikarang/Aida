@@ -1,13 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
-import * as admin from "firebase-admin";
+import * as adminImport from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+
+const admin = adminImport.default || adminImport;
 
 // Helper to initialize and get db lazily
 let _db: FirebaseFirestore.Firestore | null = null;
 function getDb() {
   if (_db) return _db;
   
-  if (!admin.apps.length) {
+  if (!admin.apps?.length) {
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         // Used in Vercel - Needs Private Key JSON
