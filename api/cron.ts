@@ -28,13 +28,20 @@ export default async function handler(req: any, res: any) {
     const db = getDb();
     const now = new Date();
     
-    // Cari pengingat yang waktunya sudah tiba (<= sekarang) dan statusnya "pending"
+    // Cari semua pengingat yang statusnya "pending"
     const snapshot = await db.collection("reminders")
       .where("status", "==", "pending")
-      .where("time", "<=", now)
       .get();
 
-    if (snapshot.empty) {
+    // Filter di memory untuk menghindari error "query requires an index" di Firestore
+    const dueDocs = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      // data.time bisa berupa objek Firestore Timestamp (jika disimpan lewat SDK) atau Date
+      const reminderTime = data.time?.toDate ? data.time.toDate() : new Date(data.time);
+      return reminderTime <= now;
+    });
+
+    if (dueDocs.length === 0) {
       return res.status(200).json({ status: "ok", sent: 0, message: "Tidak ada pengingat yang jatuh tempo saat ini." });
     }
 
@@ -46,7 +53,7 @@ export default async function handler(req: any, res: any) {
     let sentCount = 0;
     
     // Proses semua pengingat satu per satu
-    for (const doc of snapshot.docs) {
+    for (const doc of dueDocs) {
       const data = doc.data();
       
       try {
