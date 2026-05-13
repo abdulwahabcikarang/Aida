@@ -2,6 +2,9 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import webhookHandler from "./api/webhook";
+import statusHandler from "./api/status";
+import settingsHandler from "./api/settings";
+import contactsHandler from "./api/contacts";
 
 async function startServer() {
   const app = express();
@@ -16,9 +19,14 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Load API Handlers
+  app.all("/api/settings", settingsHandler);
+  app.all("/api/contacts", contactsHandler);
+  app.all("/api/status", statusHandler);
+
   // Webhook for Fonnte (WhatsApp) - works on both /api/webhook and /webhook
-  app.post("/api/webhook", webhookHandler);
-  app.post("/webhook", webhookHandler);
+  app.all("/api/webhook", webhookHandler);
+  app.all("/webhook", webhookHandler);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

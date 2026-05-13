@@ -71,53 +71,90 @@ export default async function handler(req: any, res: any) {
 
     let history: { role: string; parts: { text: string }[] }[] = [];
     let chatRef: any = null;
+    let globalSettings: any = {
+      systemPrompt: "Kamu adalah asisten AI di WhatsApp yang sangat ramah. Namamu adalah AIDA. Jawablah setiap pertanyaan dengan ringkas, jelas, dan sangat membantu.",
+      creativity: 0.7,
+      maxMemory: 10,
+      knowledgeBase: ""
+    };
+    let contactData: any = {};
 
     try {
       const db = getDb();
+      // Fetch global settings
+      const settingsDoc = await db.collection("settings").doc("global").get();
+      if (settingsDoc.exists) {
+        globalSettings = { ...globalSettings, ...settingsDoc.data() };
+      }
+
       chatRef = db.collection("chats").doc(sender);
       const chatDoc = await chatRef.get();
       if (chatDoc.exists) {
-        history = chatDoc.data()?.history || [];
+        contactData = chatDoc.data() || {};
+        history = contactData.history || [];
       }
     } catch (e) {
       console.error("Firebase is not configured properly or failed to read (proceeding without history):", e);
     }
+
+    if (contactData.humanTakeover) {
+      // Ignore AI processing if human takeover is active
+      return res.status(200).json({ status: "ignored", detail: "Human takeover active" });
+    }
     
-    // Default system prompt
+    // Default system prompt builder
+    let finalSystemPrompt = globalSettings.systemPrompt;
+    if (globalSettings.knowledgeBase && globalSettings.knowledgeBase.trim() !== "") {
+      finalSystemPrompt += `\n\n--- PENGETAHUAN TAMBAHAN ---\n${globalSettings.knowledgeBase}\n--------------------------`;
+    }
+    if (contactData.instruction && contactData.instruction.trim() !== "") {
+      finalSystemPrompt += `\n\n--- CATATAN TENTANG PENGGUNA INI ---\n${contactData.instruction}`;
+    }
+
     if (history.length === 0) {
       history = [
         {
           role: "user",
-          parts: [{ text: "Kamu adalah asisten AI di WhatsApp yang sangat ramah. Namamu adalah AIDA. Jawablah setiap pertanyaan dengan ringkas, jelas, dan sangat membantu." }]
+          parts: [{ text: finalSystemPrompt }]
         },
         {
           role: "model",
-          parts: [{ text: "Halo! Aku AIDA. Ada yang bisa aku bantu?" }]
+          parts: [{ text: "Siap! Aku akan membantu pengguna sesuai instruksi." }]
         }
       ];
+    } else {
+      // Update the very first message with the latest system prompt
+      if (history[0] && history[0].role === 'user') {
+        history[0].parts[0].text = finalSystemPrompt;
+      }
     }
 
     // Format chat prompt manually for Gemini 2.5 Flash
-    const prompt = history.map(m => `${m.role === 'model' ? 'AIDA' : 'Pengguna'}: ${m.parts[0].text}`).join('\n') + `\nPengguna: ${message}\nAIDA:`;
+    const formattedHistory = history.map(m => `${m.role === 'model' ? 'AIDA' : 'Sistem/Pengguna'}: ${m.parts[0].text}`).join('\n');
+    const prompt = formattedHistory + `\nPengguna: ${message}\nAIDA:`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        temperature: globalSettings.creativity ?? 0.7,
+      }
     });
 
     const reply = response.text || "Maaf, aku tidak bisa memproses permintaan itu saat ini.";
+    const limit = typeof globalSettings.maxMemory === 'number' ? globalSettings.maxMemory : 10;
 
     // Save to Firebase
     try {
       if (chatRef) {
         await chatRef.set({
           sender,
-          name: name || sender,
+          name: contactData.name || name || sender,
           history: [
             ...history,
             { role: "user", parts: [{ text: message }] },
             { role: "model", parts: [{ text: reply }] }
-          ].slice(-10), // Keep last 10 messages
+          ].slice(-(limit + 2)), // Keep last 'limit' messages + the 2 root system messages
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
       }
