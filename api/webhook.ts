@@ -2,25 +2,32 @@ import { GoogleGenAI } from "@google/genai";
 import * as admin from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-// Initialize Firebase Admin (Handle both Vercel and local environment)
-if (!admin.apps.length) {
-  try {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      // Used in Vercel - Needs Private Key JSON
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-    } else {
-      // Used Locally / AI Studio config
-      admin.initializeApp();
+// Helper to initialize and get db lazily
+let _db: FirebaseFirestore.Firestore | null = null;
+function getDb() {
+  if (_db) return _db;
+  
+  if (!admin.apps.length) {
+    try {
+      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        // Used in Vercel - Needs Private Key JSON
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+      } else {
+        // Used Locally / AI Studio config
+        admin.initializeApp();
+      }
+    } catch (e) {
+      console.error("Firebase admin init error:", e);
+      throw new Error("Failed to initialize Firebase Admin");
     }
-  } catch (e) {
-    console.error("Firebase admin init error:", e);
   }
+  _db = getFirestore();
+  return _db;
 }
 
-const db = getFirestore();
 let ai: GoogleGenAI | null = null;
 
 export default async function handler(req: any, res: any) {
@@ -57,6 +64,7 @@ export default async function handler(req: any, res: any) {
       throw new Error("FONNTE_TOKEN is required");
     }
 
+    const db = getDb();
     const chatRef = db.collection("chats").doc(sender);
     
     let history: { role: string; parts: { text: string }[] }[] = [];
