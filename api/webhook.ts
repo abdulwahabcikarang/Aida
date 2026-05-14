@@ -103,7 +103,13 @@ export default async function handler(req: any, res: any) {
     }
     
     // Default system prompt builder
+    let isMaster = false;
     let finalSystemPrompt = globalSettings.systemPrompt;
+    if (globalSettings.masterContact && sender === globalSettings.masterContact) {
+      isMaster = true;
+      finalSystemPrompt += "\n\n⚠️ ANDA ADALAH MASTER CONTACT (SUPER ADMIN). Anda memiliki otorisasi penuh untuk melihat, mencari, dan bertanya mengenai data (notes, pengingat, chats) milik semua pengguna di sistem ini. Anda bisa menggunakan alat administrator.";
+    }
+
     if (globalSettings.knowledgeBase && globalSettings.knowledgeBase.trim() !== "") {
       finalSystemPrompt += `\n\n--- PENGETAHUAN TAMBAHAN ---\n${globalSettings.knowledgeBase}\n--------------------------`;
     }
@@ -121,73 +127,92 @@ Jika pengguna meminta dijadwalkan pengingat, gunakan tool 'schedule_reminder'.
 Jika pengguna meminta untuk mencatat sesuatu yang penting (buku catatan), gunakan tool 'save_note', 'search_notes', 'update_note', atau 'delete_note'.
 PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
 
+    const toolsList: any[] = [
+      {
+        name: "schedule_reminder",
+        description: "Jadwalkan pengingat yang akan dikirim secara otomatis ke nomor WhatsApp pengguna pada waktu tertentu.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            time_iso: { type: "STRING", description: "Waktu ISO 8601 (contoh: 2026-05-14T02:00:00Z)." },
+            reminder_message: { type: "STRING", description: "Pesan pengingat." }
+          },
+          required: ["time_iso", "reminder_message"]
+        }
+      },
+      {
+        name: "save_note",
+        description: "Menyimpan data, ide, atau catatan penting terkait pengguna. Gunakan saat pengguna minta mencatat atau mengingat informasi jangka panjang.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING", description: "Judul catatan" },
+            content: { type: "STRING", description: "Isi catatan lengkap" }
+          },
+          required: ["title", "content"]
+        }
+      },
+      {
+        name: "search_notes",
+        description: "Mencari buku catatan pengguna berdasarkan kata kunci apabila pengguna menanyakan informasi yang pernah dicatat.",
+        parameters: {
+          type: "OBJECT",
+          properties: { keyword: { type: "STRING" } },
+          required: ["keyword"]
+        }
+      },
+      {
+        name: "get_recent_notes",
+        description: "Mendapatkan 5 daftar catatan terakhir milik pengguna.",
+        parameters: { type: "OBJECT" }
+      },
+      {
+        name: "delete_note",
+        description: "Menghapus catatan berdasarkan ID catatan.",
+        parameters: {
+          type: "OBJECT",
+          properties: { note_id: { type: "STRING" } },
+          required: ["note_id"]
+        }
+      },
+      {
+        name: "update_note",
+        description: "Memperbarui isi/judul catatan berdasarkan ID catatan.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            note_id: { type: "STRING" },
+            new_title: { type: "STRING" },
+            new_content: { type: "STRING" }
+          },
+          required: ["note_id", "new_title", "new_content"]
+        }
+      }
+    ];
+
+    if (isMaster) {
+      toolsList.push({
+        name: "master_search_all_notes",
+        description: "[ADMIN] Mencari seluruh catatan dari SEMUA PENGGUNA. Berguna jika master bertanya tentang data milik orang lain.",
+        parameters: {
+          type: "OBJECT",
+          properties: { keyword: { type: "STRING", description: "Kata kunci untuk pencarian di seluruh database catatan" } },
+          required: ["keyword"]
+        }
+      });
+      toolsList.push({
+        name: "master_get_all_contacts",
+        description: "[ADMIN] Mendapatkan daftar nomor kontak yang pernah berinteraksi dengan AI.",
+        parameters: { type: "OBJECT" }
+      });
+    }
+
     const aiConfig: any = {
       temperature: globalSettings.creativity ?? 0.7,
       systemInstruction: systemInstruction,
       tools: [
         {
-          functionDeclarations: [
-            {
-              name: "schedule_reminder",
-              description: "Jadwalkan pengingat yang akan dikirim secara otomatis ke nomor WhatsApp pengguna pada waktu tertentu.",
-              parameters: {
-                type: "OBJECT",
-                properties: {
-                  time_iso: { type: "STRING", description: "Waktu ISO 8601 (contoh: 2026-05-14T02:00:00Z)." },
-                  reminder_message: { type: "STRING", description: "Pesan pengingat." }
-                },
-                required: ["time_iso", "reminder_message"]
-              }
-            },
-            {
-              name: "save_note",
-              description: "Menyimpan data, ide, atau catatan penting terkait pengguna. Gunakan saat pengguna minta mencatat atau mengingat informasi jangka panjang.",
-              parameters: {
-                type: "OBJECT",
-                properties: {
-                  title: { type: "STRING", description: "Judul catatan" },
-                  content: { type: "STRING", description: "Isi catatan lengkap" }
-                },
-                required: ["title", "content"]
-              }
-            },
-            {
-              name: "search_notes",
-              description: "Mencari buku catatan pengguna berdasarkan kata kunci apabila pengguna menanyakan informasi yang pernah dicatat.",
-              parameters: {
-                type: "OBJECT",
-                properties: { keyword: { type: "STRING" } },
-                required: ["keyword"]
-              }
-            },
-            {
-              name: "get_recent_notes",
-              description: "Mendapatkan 5 daftar catatan terakhir milik pengguna.",
-              parameters: { type: "OBJECT" }
-            },
-            {
-              name: "delete_note",
-              description: "Menghapus catatan berdasarkan ID catatan.",
-              parameters: {
-                type: "OBJECT",
-                properties: { note_id: { type: "STRING" } },
-                required: ["note_id"]
-              }
-            },
-            {
-              name: "update_note",
-              description: "Memperbarui isi/judul catatan berdasarkan ID catatan.",
-              parameters: {
-                type: "OBJECT",
-                properties: {
-                  note_id: { type: "STRING" },
-                  new_title: { type: "STRING" },
-                  new_content: { type: "STRING" }
-                },
-                required: ["note_id", "new_title", "new_content"]
-              }
-            }
-          ]
+          functionDeclarations: toolsList
         }
       ]
     };
@@ -268,6 +293,19 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
                 toolResponseData = { success: false, error: String(e) };
              }
           }
+          else if (call.name === "master_search_all_notes" && isMaster) {
+             const keyword = (call.args as any).keyword?.toLowerCase() || "";
+             const snapshot = await db.collection("notes").get();
+             const notes = snapshot.docs
+               .map(d => ({ id: d.id, ...d.data() }))
+               .filter((n: any) => (n.title?.toLowerCase().includes(keyword) || n.content?.toLowerCase().includes(keyword)))
+               .slice(0, 10);
+             toolResponseData = { notes: notes.map((n:any) => ({ id: n.id, sender: n.sender, title: n.title, content: n.content })) };
+          }
+          else if (call.name === "master_get_all_contacts" && isMaster) {
+             const snapshot = await db.collection("chats").select("name", "sender").limit(50).get();
+             toolResponseData = { contacts: snapshot.docs.map(d => d.data()) };
+          }
 
           historyCopied.push({ role: "model", parts: [{ functionCall: call }] });
           historyCopied.push({ 
@@ -306,21 +344,23 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
       console.error("Firebase write error:", e);
     }
 
-    // Send reply via Fonnte API
-    const fonnteRes = await fetch("https://api.fonnte.com/send", {
-      method: "POST",
-      headers: {
-        "Authorization": fonnteToken,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        target: sender,
-        message: reply,
-      })
-    });
-    
-    const fonnteData = await fonnteRes.json();
-    console.log("Fonnte API Response:", fonnteData);
+    // Send reply via Fonnte API if not simulation
+    if (!body.simulator) {
+      const fonnteRes = await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: {
+          "Authorization": fonnteToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          target: sender,
+          message: reply,
+        })
+      });
+      
+      const fonnteData = await fonnteRes.json();
+      console.log("Fonnte API Response:", fonnteData);
+    }
 
     return res.status(200).json({ status: "success", reply });
 

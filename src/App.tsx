@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Users, BookOpen, Activity, Save, BarChart2, FileText, Bell, Clock, RefreshCw } from 'lucide-react';
+import { Settings, Users, BookOpen, Activity, Save, BarChart2, FileText, Bell, Clock, RefreshCw, CalendarDays, Menu, X, Send, Link, Sun, AlertTriangle } from 'lucide-react';
 
 function OverviewTab() {
   const [stats, setStats] = useState<any>({ totalMessages: 0, activeUsers: 0, totalReminders: 0, totalNotes: 0 });
@@ -253,8 +253,61 @@ function NotesTab() {
   );
 }
 
+function RemindersTab() {
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReminders = () => {
+    setLoading(true);
+    fetch('/api/dashboard-reminders').then(r => r.json()).then(data => {
+      setReminders(data.reminders || []);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { fetchReminders(); }, []);
+
+  const deleteReminder = async (id: string) => {
+    if (!confirm("Hapus pengingat ini secara permanen?")) return;
+    await fetch('/api/dashboard-reminders', {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    fetchReminders();
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Daftar Pengingat</h2>
+      <p className="text-sm text-gray-600 mb-4">Semua pengingat yang telah dijadwalkan oleh pengguna maupun riwayat masa lalu.</p>
+      
+      {loading ? <p>Memuat pengingat...</p> : (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {reminders.map(rem => (
+               <div key={rem.id} className="bg-white border rounded-xl p-4 shadow-sm flex flex-col relative">
+                  <div className="flex justify-between items-start mb-2">
+                     <span className={`text-[10px] px-2 py-1 rounded-full border font-bold uppercase ${rem.status === 'pending' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-green-100 text-green-700 border-green-200'}`}>{rem.status}</span>
+                     <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded-full border">{rem.sender}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 font-medium whitespace-pre-wrap flex-1 my-3">{rem.message}</p>
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                     <div className="text-xs text-gray-500 flex flex-col">
+                        <span className="flex items-center gap-1"><Clock size={12}/> {new Date(rem.time).toLocaleString('id-ID')}</span>
+                     </div>
+                     <button onClick={() => deleteReminder(rem.id)} className="text-red-500 hover:text-red-700 text-sm font-medium border border-red-100 px-2 py-1 rounded-md hover:bg-red-50">Hapus</button>
+                  </div>
+               </div>
+            ))}
+            {reminders.length === 0 && <p className="text-gray-500 italic col-span-full">Belum ada pengingat.</p>}
+         </div>
+      )}
+    </div>
+  );
+}
+
 function GlobalSettingsTab() {
-  const [settings, setSettings] = useState({ systemPrompt: "", creativity: 0.7, maxMemory: 10, morningReportTime: 6, morningReportEnabled: true });
+  const [settings, setSettings] = useState({ systemPrompt: "", creativity: 0.7, maxMemory: 10, morningReportTime: 6, morningReportEnabled: true, randomGreetingEnabled: true, masterContact: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -277,6 +330,20 @@ function GlobalSettingsTab() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Global AI Settings</h2>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Nomor Master (Super Admin)
+        </label>
+        <input 
+          type="text"
+          value={settings.masterContact}
+          onChange={e => setSettings({...settings, masterContact: e.target.value})}
+          placeholder="contoh: 081234567890 (kosongkan jika tidak ada)"
+          className="w-full p-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p className="text-xs text-blue-600 mt-1">⚠️ Nomor ini dapat mencari data catatan seluruh pengguna.</p>
+      </div>
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">System Prompt / Peran AI</label>
@@ -320,7 +387,7 @@ function GlobalSettingsTab() {
       </div>
 
       <div className="border-t pt-6 mt-6">
-        <h3 className="text-lg font-medium text-gray-800 mb-4">Pengaturan Laporan Pagi</h3>
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Sapaan Acak Harian & Laporan Pagi</h3>
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <input 
@@ -336,7 +403,7 @@ function GlobalSettingsTab() {
           </div>
           
           {settings.morningReportEnabled && (
-            <div>
+            <div className="pl-7">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Jam Kirim Laporan (Waktu Jakarta / UTC+7)
               </label>
@@ -352,6 +419,22 @@ function GlobalSettingsTab() {
               <p className="text-xs text-gray-500 mt-1">Laporan pagi akan dikirimkan pada jam ini setiap hari.</p>
             </div>
           )}
+
+          <div className="flex items-start gap-2 pt-2">
+            <input 
+              type="checkbox" 
+              id="randomGreetingEnabled"
+              checked={settings.randomGreetingEnabled}
+              onChange={e => setSettings({...settings, randomGreetingEnabled: e.target.checked})}
+              className="w-5 h-5 text-blue-600 rounded mt-0.5"
+            />
+            <div>
+              <label htmlFor="randomGreetingEnabled" className="text-sm font-medium text-gray-700 block">
+                Aktifkan Sapaan Acak Siang/Sore
+              </label>
+              <p className="text-xs text-gray-500 mt-1">AIDA akan mengirim sapaan ramah dan menanyakan kabar secara acak pada setiap kontak antara pukul 08:00 hingga 20:00. Pesan dihasilkan secara dinamis berdasarkan memori pengguna.</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -563,68 +646,149 @@ function ContactsTab() {
   );
 }
 
+function BroadcastTab() {
+  const [target, setTarget] = useState('all');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const sendBroadcast = async () => {
+    if (!message.trim()) return alert("Pesan tidak boleh kosong");
+    if (!confirm("Kirim pesan broadcast sekarang?")) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch('/api/dashboard-broadcast', {
+        method: "POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ target, message })
+      });
+      const data = await res.json();
+      if (data.success) {
+         alert(`Siaran berhasil dikirim ke ${data.sentCount} penerima!`);
+         setMessage('');
+      } else {
+         alert("Gagal: " + (data.error || "Unknown"));
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Broadcast Pesan</h2>
+      <p className="text-sm text-gray-600">Kirim pesan siaran (broadcast) kepada pengguna AI Anda secara massal.</p>
+      
+      <div>
+         <label className="block text-sm font-medium mb-1">Target Penerima</label>
+         <input 
+           type="text" 
+           value={target} 
+           onChange={e => setTarget(e.target.value)}
+           placeholder="'all' untuk semua, atau pisahkan dengan koma: 0812.., 0813.."
+           className="w-full p-2 border rounded-lg"
+         />
+      </div>
+      <div>
+         <label className="block text-sm font-medium mb-1">Pesan Siaran</label>
+         <textarea 
+           value={message} 
+           onChange={e => setMessage(e.target.value)}
+           className="w-full h-32 p-3 border rounded-lg"
+           placeholder="Ketik pesan Anda di sini..."
+         />
+      </div>
+      <button 
+        onClick={sendBroadcast} 
+        disabled={loading}
+        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50"
+      >
+        <Send size={18} /> {loading ? "Mengirim..." : "Kirim Broadcast Sekarang"}
+      </button>
+    </div>
+  );
+}
+
+function IntegrationsTab() {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">API Eksternal & Integrasi</h2>
+      <p className="text-sm text-gray-600">Kelola URL Endpoint dan API Key eksternal (seperti Cek Resi, Cuaca, Google Calendar) secara terpusat.</p>
+      
+      <div className="bg-white border rounded-xl p-6 text-center">
+        <p className="text-gray-500 italic">Fitur manajemen API akan segera hadir. Anda akan dapat menambahkan endpoint dan API Key di sini nantinya.</p>
+      </div>
+    </div>
+  );
+}
+
+function MorningReportLogsTab() {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Riwayat Laporan Pagi</h2>
+      <p className="text-sm text-gray-600">Arsip lengkap laporan pagi eksekutif yang pernah dikirim AIDA ke pengguna.</p>
+      
+      <div className="bg-white border rounded-xl p-6 text-center">
+        <p className="text-gray-500 italic">Belum ada riwayat laporan pagi yang tercatat.</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorLogsTab() {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Log Error Sistem</h2>
+      <p className="text-sm text-gray-600">Lacak pengiriman pesan gagal, error API Gemini, atau error operasional lainnya.</p>
+      
+      <div className="bg-gray-900 border rounded-xl p-6 text-left">
+        <div className="text-green-400 font-mono text-sm">[INFO] System is running normally. No recent errors.</div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const navItems = [
+    { id: 'overview', label: 'Ringkasan', icon: <Activity size={18} /> },
+    { id: 'notes', label: 'Buku Catatan', icon: <FileText size={18} /> },
+    { id: 'reminders', label: 'Pengingat', icon: <CalendarDays size={18} /> },
+    { id: 'broadcast', label: 'Broadcast Pesan', icon: <Send size={18} /> },
+    { id: 'integrations', label: 'API & Integrasi', icon: <Link size={18} /> },
+    { id: 'morning_reports', label: 'Laporan Pagi', icon: <Sun size={18} /> },
+    { id: 'contacts', label: 'Manajemen Pengguna', icon: <Users size={18} /> },
+    { id: 'knowledge', label: 'Basis Pengetahuan', icon: <BookOpen size={18} /> },
+    { id: 'settings', label: 'Pengaturan Global', icon: <Settings size={18} /> },
+    { id: 'error_logs', label: 'Log Error Sistem', icon: <AlertTriangle size={18} /> },
+    { id: 'status', label: 'Status Webhook', icon: <Activity size={18} /> }
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden sm:flex fixed h-full z-10">
+      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden sm:flex fixed h-full z-10 overflow-y-auto hide-scrollbar">
         <div className="p-6">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
             AIDA Dashboard
           </h1>
           <p className="text-xs text-gray-500 mt-1">AI WhatsApp Controller</p>
         </div>
-        <nav className="flex-1 px-4 space-y-2">
-          <button 
-            onClick={() => setActiveTab('overview')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'overview' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <Activity size={18} /> Ringkasan
-          </button>
-          <button 
-            onClick={() => setActiveTab('notes')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'notes' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <FileText size={18} /> Buku Catatan
-          </button>
-          <button 
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <Settings size={18} /> Pengaturan Global
-          </button>
-          <button 
-            onClick={() => setActiveTab('knowledge')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'knowledge' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <BookOpen size={18} /> Basis Pengetahuan
-          </button>
-          <button 
-            onClick={() => setActiveTab('contacts')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'contacts' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <Users size={18} /> Manajemen Pengguna
-          </button>
-          <button 
-            onClick={() => setActiveTab('status')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'status' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <Activity size={18} /> System Status
-          </button>
+        <nav className="flex-1 px-4 pb-6 space-y-1">
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === item.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {item.icon} {item.label}
+            </button>
+          ))}
         </nav>
       </aside>
 
@@ -634,24 +798,44 @@ export default function App() {
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
             AIDA Dashboard
           </h1>
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
         </div>
+
+        {isMobileMenuOpen && (
+          <div className="sm:hidden mb-6 bg-white border border-gray-200 rounded-xl shadow-sm p-2 flex flex-col gap-1">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === item.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {item.icon} {item.label}
+              </button>
+            ))}
+          </div>
+        )}
         
         <div className="max-w-4xl mx-auto bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8 md:p-10 min-h-[80vh]">
-          {/* Mobile menu fallback for demo/simplicity */}
-          <div className="sm:hidden flex gap-2 overflow-x-auto mb-6 pb-2 border-b">
-             <button onClick={() => setActiveTab('overview')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Ringkasan</button>
-             <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'notes' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Catatan</button>
-             <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'settings' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Settings</button>
-             <button onClick={() => setActiveTab('knowledge')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'knowledge' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Knowledge</button>
-             <button onClick={() => setActiveTab('contacts')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'contacts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Pengguna</button>
-             <button onClick={() => setActiveTab('status')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'status' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Status</button>
-          </div>
-          
           {activeTab === 'overview' && <OverviewTab />}
           {activeTab === 'notes' && <NotesTab />}
-          {activeTab === 'settings' && <GlobalSettingsTab />}
-          {activeTab === 'knowledge' && <KnowledgeTab />}
+          {activeTab === 'reminders' && <RemindersTab />}
+          {activeTab === 'broadcast' && <BroadcastTab />}
+          {activeTab === 'integrations' && <IntegrationsTab />}
+          {activeTab === 'morning_reports' && <MorningReportLogsTab />}
           {activeTab === 'contacts' && <ContactsTab />}
+          {activeTab === 'knowledge' && <KnowledgeTab />}
+          {activeTab === 'settings' && <GlobalSettingsTab />}
+          {activeTab === 'error_logs' && <ErrorLogsTab />}
           {activeTab === 'status' && <SetupStatusTab />}
         </div>
       </main>

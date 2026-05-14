@@ -126,6 +126,83 @@ export default async function handler(req: any, res: any) {
     }
 
     // ============================================
+    // 1b. SAPAAN ACAK (RANDOM GREETING)
+    // ============================================
+    const randomGreetingEnabled = settings?.randomGreetingEnabled !== false;
+    let randomGreetingsSent = 0;
+    
+    if (randomGreetingEnabled) {
+       const currentHour = jakartaTime.getHours();
+       // Berlaku antara pukul 08:00 hingga 19:59
+       if (currentHour >= 8 && currentHour < 20) {
+          const chatSnapshot = await db.collection("chats").get();
+          for (const doc of chatSnapshot.docs) {
+             const chatData = doc.data();
+             if (chatData.sender && chatData.lastRandomGreetingDate !== dateString) {
+                let plannedTime = chatData.plannedRandomGreetingTime;
+                let plannedDate = chatData.plannedRandomGreetingDate;
+                
+                if (plannedDate !== dateString) {
+                   const minMinute = 8 * 60;
+                   const maxMinute = 19 * 60 + 59;
+                   plannedTime = Math.floor(Math.random() * (maxMinute - minMinute + 1)) + minMinute;
+                   plannedDate = dateString;
+                   await doc.ref.update({
+                      plannedRandomGreetingTime: plannedTime,
+                      plannedRandomGreetingDate: plannedDate
+                   });
+                }
+
+                const currentTotalMinutes = currentHour * 60 + jakartaTime.getMinutes();
+                if (currentTotalMinutes >= plannedTime) {
+                   const userName = chatData.name || "di sana";
+                   
+                   try {
+                     const notesSnap = await db.collection("notes").where("sender", "==", chatData.sender).orderBy("createdAt", "desc").limit(3).get();
+                     const recentNotes = notesSnap.docs.map(d => d.data().title).join(", ");
+                     
+                     const prompt = `Ini adalah tugas mengirim "Sapaan Siang/Sore" otomatis ke kontak.
+Namanya: ${userName}.
+Waktu di Jakarta: ${jakartaTime.toLocaleString("id-ID")}.
+
+${recentNotes ? `Sebagai konteks tambahan, pengguna memiliki catatan mengenai: ${recentNotes}. Gunakan jika dirasa relevan atau bisa diabaikan.` : ''}
+
+Instruksi PENTING:
+- Tuliskan pesan singkat yang kasual, santai, seolah-olah chat dari asisten teman sendiri tanpa pembukaan kaku (JANGAN gunakan sapaan formal atau tulisan "Halo AIDA di sini"). Langsung saja seperti mengajak ngobrol.
+- Tanyakan kabarnya atau bagaimana harinya berjalan. Jangan menggurui. Bisa bahas sedikit konteks / kesukaan jika kamu tahu.
+- Jangan tulis salam pembuka/penutup.
+- Sertakan emoji sewajarnya.`;
+
+                     const genAi = getAi();
+                     const response = await genAi.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: prompt,
+                        config: { temperature: 0.95 }
+                     });
+                     
+                     const greetingMsg = response.text || "Ngomong-ngomong, gimana harimu sejauh ini? Kalau mau cerita atau butuh bantuan, ketik aja ya! 😊";
+                     
+                     await fetch("https://api.fonnte.com/send", {
+                       method: "POST",
+                       headers: { "Authorization": fonnteToken, "Content-Type": "application/json" },
+                       body: JSON.stringify({ 
+                         target: chatData.sender, 
+                         message: greetingMsg 
+                       })
+                     });
+                     
+                     await doc.ref.update({ lastRandomGreetingDate: dateString });
+                     randomGreetingsSent++;
+                   } catch (e) {
+                     console.error(`Gagal kirim Random Greeting ke ${chatData.sender}`, e);
+                   }
+                }
+             }
+          }
+       }
+    }
+
+    // ============================================
     // 2. PENGIRIMAN PENGINGAT (REMINDERS)
     // ============================================
     const snapshot = await db.collection("reminders")
@@ -187,7 +264,7 @@ export default async function handler(req: any, res: any) {
       }
     }
     
-    return res.status(200).json({ status: "ok", remindersSent: sentCount, morningReportsSent: reportSent });
+    return res.status(200).json({ status: "ok", remindersSent: sentCount, morningReportsSent: reportSent, randomGreetingsSent: randomGreetingsSent });
 
   } catch (error: any) {
     console.error("Cron Error:", error);
