@@ -203,6 +203,59 @@ Instruksi PENTING:
     }
 
     // ============================================
+    // 1c. PERTANYAAN BUKU HARIAN MALAM (EVENING JOURNAL)
+    // ============================================
+    let eveningJournalSent = 0;
+    const currentHourForJournal = jakartaTime.getHours();
+    
+    // Kirim pada jam 20:00 (jam 8 malam)
+    if (currentHourForJournal === 20) {
+       const chatSnapshot = await db.collection("chats").get();
+       for (const doc of chatSnapshot.docs) {
+          const chatData = doc.data();
+          if (chatData.sender && chatData.lastEveningJournalDate !== dateString) {
+             const userName = chatData.name || "kamu";
+             
+             try {
+                const prompt = `Ini adalah tugas mengirim sapaan malam otomatis ke kontak untuk buku harian (diary).
+Namanya: ${userName}.
+Waktu di Jakarta: ${jakartaTime.toLocaleString("id-ID")}.
+
+Instruksi PENTING:
+- Sapa selamat malam dengan hangat dan bersahabat.
+- Tanyakan kabarnya hari ini atau bagaimana harinya berjalan. 
+- Tanya apakah ada sesuatu yang ingin ia ceritakan atau tulis untuk disimpan ke buku hariannya malam ini.
+- Jangan terlalu panjang. Sekitar 2-3 kalimat santai.
+- Sertakan emoji yang menenangkan (seperti 🌙, 🍵, 📔, dll).`;
+
+                const genAi = getAi();
+                const response = await genAi.models.generateContent({
+                   model: 'gemini-2.5-flash',
+                   contents: prompt,
+                   config: { temperature: 0.8 }
+                });
+                
+                const journalMsg = response.text || `Malam ${userName}! 🌙 Gimana harimu hari ini? Kalau ada cerita seru, keluh kesah, atau momen penting, ceritain aja ke aku ya. Nanti aku bantu simpan di buku harianmu. 📔`;
+                
+                await fetch("https://api.fonnte.com/send", {
+                  method: "POST",
+                  headers: { "Authorization": fonnteToken, "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    target: chatData.sender, 
+                    message: journalMsg 
+                  })
+                });
+                
+                await doc.ref.update({ lastEveningJournalDate: dateString });
+                eveningJournalSent++;
+             } catch (e) {
+                console.error(`Gagal kirim Evening Journal ke ${chatData.sender}`, e);
+             }
+          }
+       }
+    }
+
+    // ============================================
     // 2. PENGIRIMAN PENGINGAT (REMINDERS)
     // ============================================
     const snapshot = await db.collection("reminders")
@@ -264,7 +317,7 @@ Instruksi PENTING:
       }
     }
     
-    return res.status(200).json({ status: "ok", remindersSent: sentCount, morningReportsSent: reportSent, randomGreetingsSent: randomGreetingsSent });
+    return res.status(200).json({ status: "ok", remindersSent: sentCount, morningReportsSent: reportSent, randomGreetingsSent: randomGreetingsSent, eveningJournalSent: eveningJournalSent });
 
   } catch (error: any) {
     console.error("Cron Error:", error);

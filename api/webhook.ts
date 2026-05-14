@@ -124,10 +124,22 @@ export default async function handler(req: any, res: any) {
     const timeInJakarta = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
     const systemInstruction = `${finalSystemPrompt}\n\nWaktu saat ini (waktu Indonesia/Jakarta): ${timeInJakarta}. 
 Jika pengguna meminta dijadwalkan pengingat, gunakan tool 'schedule_reminder'.
-Jika pengguna meminta untuk mencatat sesuatu yang penting (buku catatan), gunakan tool 'save_note', 'search_notes', 'update_note', atau 'delete_note'.
+Jika pengguna memberikan jurnal harian atau ditanya tentang harinya lalu bercerita, gunakan tool 'save_journal'.
+Jika pengguna meminta untuk mencatat ringkasan sesuatu yang lain (bukan jurnal harian), gunakan tool 'save_note', 'search_notes', 'update_note', atau 'delete_note'.
 PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
 
     const toolsList: any[] = [
+      {
+        name: "save_journal",
+        description: "Menyimpan catatan harian pengguna (diary) dari ceritanya hari ini ke basis data catatan harian khusus.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            content: { type: "STRING", description: "Isi catatan harian / cerita pengguna hari ini" }
+          },
+          required: ["content"]
+        }
+      },
       {
         name: "schedule_reminder",
         description: "Jadwalkan pengingat yang akan dikirim secara otomatis ke nomor WhatsApp pengguna pada waktu tertentu.",
@@ -251,6 +263,11 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
             } catch (e: any) {
               return "Maaf, ada kendala mengatur pengingat.";
             }
+          }
+          else if (call.name === "save_journal") {
+             const { content } = call.args as any;
+             await db.collection("journals").add({ sender, content, date: new Date().toISOString().split('T')[0], createdAt: FieldValue.serverTimestamp() });
+             return `Catatan harian berhasil disimpan! 📓\nTerima kasih sudah berbagi cerita hari ini.`;
           }
           else if (call.name === "save_note") {
              const { title, content } = call.args as any;

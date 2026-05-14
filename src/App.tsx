@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Users, BookOpen, Activity, Save, BarChart2, FileText, Bell, Clock, RefreshCw, CalendarDays, Menu, X, Send, Link, Sun, AlertTriangle } from 'lucide-react';
+import { Settings, Users, BookOpen, Activity, Save, BarChart2, FileText, Bell, Clock, RefreshCw, CalendarDays, Menu, X, Send, Link, Sun, AlertTriangle, Book } from 'lucide-react';
 
 function OverviewTab() {
   const [stats, setStats] = useState<any>({ totalMessages: 0, activeUsers: 0, totalReminders: 0, totalNotes: 0 });
@@ -749,6 +749,83 @@ function ErrorLogsTab() {
   );
 }
 
+function JournalsTab() {
+  const [journals, setJournals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchJournals = () => {
+    setLoading(true);
+    fetch('/api/dashboard-journals').then(r => r.json()).then(data => {
+      setJournals(data || []);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { fetchJournals(); }, []);
+
+  const deleteJournal = async (id: string) => {
+    if (!confirm("Hapus catatan harian ini?")) return;
+    await fetch('/api/dashboard-journals?id=' + id, { method: "DELETE" });
+    fetchJournals();
+  };
+
+  const exportCSV = () => {
+    if (journals.length === 0) return alert("Belum ada data.");
+    const header = "Pengguna,Tanggal,Catatan\n";
+    const csv = journals.map(j => `"${j.sender}","${j.date}","${(j.content || '').replace(/"/g, '""')}"`).join("\n");
+    const blob = new Blob([header + csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'catatan-harian.csv';
+    a.click();
+  };
+
+  const exportTXT = () => {
+    if (journals.length === 0) return alert("Belum ada data.");
+    const txt = journals.map(j => `Pengguna: ${j.sender}\nTanggal: ${j.date}\nCatatan:\n${j.content}\n--------------------------`).join("\n\n");
+    const blob = new Blob([txt], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'catatan-harian.txt';
+    a.click();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+         <div>
+            <h2 className="text-2xl font-bold text-gray-800">Catatan Harian (Diary)</h2>
+            <p className="text-sm text-gray-600">Catatan keseharian pengguna yang ditanyakan AIDA setiap jam 8 malam.</p>
+         </div>
+         <div className="flex gap-2">
+            <button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium text-sm">Download CSV</button>
+            <button onClick={exportTXT} className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded font-medium text-sm">Download TXT</button>
+         </div>
+      </div>
+      
+      {loading ? <p>Memuat catatan harian...</p> : (
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {journals.map(j => (
+               <div key={j.id} className="bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-sm flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                     <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">{j.date}</span>
+                     <span className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded-full border border-gray-200">{j.sender}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap mt-2 flex-1">{j.content}</p>
+                  <div className="mt-4 pt-3 border-t border-blue-200 text-right">
+                     <button onClick={() => deleteJournal(j.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Hapus</button>
+                  </div>
+               </div>
+            ))}
+            {journals.length === 0 && <p className="text-gray-500 italic col-span-full">Belum ada catatan harian.</p>}
+         </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -756,6 +833,7 @@ export default function App() {
   const navItems = [
     { id: 'overview', label: 'Ringkasan', icon: <Activity size={18} /> },
     { id: 'notes', label: 'Buku Catatan', icon: <FileText size={18} /> },
+    { id: 'journals', label: 'Catatan Harian', icon: <Book size={18} /> },
     { id: 'reminders', label: 'Pengingat', icon: <CalendarDays size={18} /> },
     { id: 'broadcast', label: 'Broadcast Pesan', icon: <Send size={18} /> },
     { id: 'integrations', label: 'API & Integrasi', icon: <Link size={18} /> },
@@ -828,6 +906,7 @@ export default function App() {
         <div className="max-w-4xl mx-auto bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8 md:p-10 min-h-[80vh]">
           {activeTab === 'overview' && <OverviewTab />}
           {activeTab === 'notes' && <NotesTab />}
+          {activeTab === 'journals' && <JournalsTab />}
           {activeTab === 'reminders' && <RemindersTab />}
           {activeTab === 'broadcast' && <BroadcastTab />}
           {activeTab === 'integrations' && <IntegrationsTab />}
