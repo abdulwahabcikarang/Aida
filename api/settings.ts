@@ -34,15 +34,17 @@ export default async function handler(req: any, res: any) {
       if (doc.exists) {
         return res.status(200).json(doc.data());
       } else {
-        return res.status(200).json({ systemPrompt: "Kamu adalah asisten AI di WhatsApp yang sangat ramah. Namamu adalah AIDA.", creativity: 0.7, maxMemory: 10, knowledgeBase: "" });
+        return res.status(200).json({ systemPrompt: "Kamu adalah asisten AI di WhatsApp yang sangat ramah. Namamu adalah AIDA.", creativity: 0.7, maxMemory: 10, knowledgeBase: "", morningReportTime: 6, morningReportEnabled: true });
       }
     } else if (req.method === 'POST') {
-      const { systemPrompt, creativity, maxMemory, knowledgeBase } = req.body || {};
+      const { systemPrompt, creativity, maxMemory, knowledgeBase, morningReportTime, morningReportEnabled } = req.body || {};
       await settingsRef.set({
         systemPrompt: systemPrompt ?? "Kamu adalah asisten AI di WhatsApp yang sangat ramah. Namamu adalah AIDA.",
         creativity: typeof creativity === 'number' ? creativity : 0.7,
         maxMemory: typeof maxMemory === 'number' ? maxMemory : 10,
-        knowledgeBase: knowledgeBase || ""
+        knowledgeBase: knowledgeBase || "",
+        morningReportTime: typeof morningReportTime === 'number' ? morningReportTime : 6,
+        morningReportEnabled: typeof morningReportEnabled === 'boolean' ? morningReportEnabled : true
       }, { merge: true });
       return res.status(200).json({ status: "ok" });
     } else {

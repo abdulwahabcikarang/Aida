@@ -117,7 +117,9 @@ export default async function handler(req: any, res: any) {
     // Menambahkan Waktu Lokal Jakarta
     const timeInJakarta = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
     const systemInstruction = `${finalSystemPrompt}\n\nWaktu saat ini (waktu Indonesia/Jakarta): ${timeInJakarta}. 
-Jika pengguna meminta untuk diingatkan di waktu tertentu (misalnya "jam 9 ingatkan saya tidur" atau "besok pagi ingatkan beli sayur"), kamu WAJIB menggunakan alat (tool) 'schedule_reminder' untuk mengatur pengingat tersebut. Setelah memanggil fungsi jadwal, balas dengan konfirmasi ramah ke pengguna.\n\nPENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
+Jika pengguna meminta dijadwalkan pengingat, gunakan tool 'schedule_reminder'.
+Jika pengguna meminta untuk mencatat sesuatu yang penting (buku catatan), gunakan tool 'save_note', 'search_notes', 'update_note', atau 'delete_note'.
+PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
 
     const aiConfig: any = {
       temperature: globalSettings.creativity ?? 0.7,
@@ -131,16 +133,58 @@ Jika pengguna meminta untuk diingatkan di waktu tertentu (misalnya "jam 9 ingatk
               parameters: {
                 type: "OBJECT",
                 properties: {
-                  time_iso: {
-                    type: "STRING",
-                    description: "Waktu penjadwalan dalam format ISO 8601 (contoh: 2026-05-14T02:00:00Z). Ingat untuk mengkonversi waktu Jakarta (UTC+7) ke UTC jika formatnya merujuk ke Z."
-                  },
-                  reminder_message: {
-                    type: "STRING",
-                    description: "Pesan yang secara spesifik akan dikirimkan kepada pengguna sebagai pengingat."
-                  }
+                  time_iso: { type: "STRING", description: "Waktu ISO 8601 (contoh: 2026-05-14T02:00:00Z)." },
+                  reminder_message: { type: "STRING", description: "Pesan pengingat." }
                 },
                 required: ["time_iso", "reminder_message"]
+              }
+            },
+            {
+              name: "save_note",
+              description: "Menyimpan data, ide, atau catatan penting terkait pengguna. Gunakan saat pengguna minta mencatat atau mengingat informasi jangka panjang.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  title: { type: "STRING", description: "Judul catatan" },
+                  content: { type: "STRING", description: "Isi catatan lengkap" }
+                },
+                required: ["title", "content"]
+              }
+            },
+            {
+              name: "search_notes",
+              description: "Mencari buku catatan pengguna berdasarkan kata kunci apabila pengguna menanyakan informasi yang pernah dicatat.",
+              parameters: {
+                type: "OBJECT",
+                properties: { keyword: { type: "STRING" } },
+                required: ["keyword"]
+              }
+            },
+            {
+              name: "get_recent_notes",
+              description: "Mendapatkan 5 daftar catatan terakhir milik pengguna.",
+              parameters: { type: "OBJECT" }
+            },
+            {
+              name: "delete_note",
+              description: "Menghapus catatan berdasarkan ID catatan.",
+              parameters: {
+                type: "OBJECT",
+                properties: { note_id: { type: "STRING" } },
+                required: ["note_id"]
+              }
+            },
+            {
+              name: "update_note",
+              description: "Memperbarui isi/judul catatan berdasarkan ID catatan.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  note_id: { type: "STRING" },
+                  new_title: { type: "STRING" },
+                  new_content: { type: "STRING" }
+                },
+                required: ["note_id", "new_title", "new_content"]
               }
             }
           ]
@@ -150,38 +194,98 @@ Jika pengguna meminta untuk diingatkan di waktu tertentu (misalnya "jam 9 ingatk
 
     cleanHistory.push({ role: "user", parts: [{ text: message }] });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: cleanHistory,
-      config: aiConfig
-    });
+    let finalHistoryToSave = [...cleanHistory];
 
-    let reply = "";
-    if (response.functionCalls && response.functionCalls.length > 0) {
-      const call = response.functionCalls[0];
-      if (call.name === "schedule_reminder") {
-        const { time_iso, reminder_message } = call.args as any;
-        
-        try {
-          const targetTime = new Date(time_iso);
-          await db.collection("reminders").add({
-            sender: sender,
-            message: reminder_message,
-            time: targetTime,
-            status: "pending",
-            createdAt: FieldValue.serverTimestamp()
+    const generateResponseRecursive = async (currentHistory: any[], maxLoops = 3): Promise<string> => {
+      let loopCount = 0;
+      let historyCopied = [...currentHistory];
+
+      while (loopCount < maxLoops) {
+        const response = await ai!.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: historyCopied,
+          config: aiConfig
+        });
+
+        if (response.functionCalls && response.functionCalls.length > 0) {
+          const call = response.functionCalls[0];
+          
+          if (call.name === "schedule_reminder") {
+            const { time_iso, reminder_message } = call.args as any;
+            try {
+              const targetTime = new Date(time_iso);
+              await db.collection("reminders").add({
+                sender: sender,
+                message: reminder_message,
+                time: targetTime,
+                status: "pending",
+                createdAt: FieldValue.serverTimestamp()
+              });
+              const localTime = targetTime.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+              return `Oke! Pengingat dicatat. Aku akan mengingatkanmu pesan: "${reminder_message}" pada ${localTime}. 🕰️`;
+            } catch (e: any) {
+              return "Maaf, ada kendala mengatur pengingat.";
+            }
+          }
+          else if (call.name === "save_note") {
+             const { title, content } = call.args as any;
+             await db.collection("notes").add({ sender, title, content, createdAt: FieldValue.serverTimestamp() });
+             return `Catatan tersimpan: *${title}* 📝\n\n${content}`;
+          }
+
+          // Read/Update/Delete operations
+          // We need to return result to Gemini so it can answer the user
+          let toolResponseData: any = { error: "Unknown function" };
+          
+          if (call.name === "search_notes") {
+             const keyword = (call.args as any).keyword.toLowerCase();
+             const snapshot = await db.collection("notes").where("sender", "==", sender).get();
+             const notes = snapshot.docs
+               .map(d => ({ id: d.id, ...d.data() }))
+               .filter((n: any) => (n.title?.toLowerCase().includes(keyword) || n.content?.toLowerCase().includes(keyword)))
+               .slice(0, 5);
+             toolResponseData = { notes: notes.map((n:any) => ({ id: n.id, title: n.title, content: n.content })) };
+          } 
+          else if (call.name === "get_recent_notes") {
+             const snapshot = await db.collection("notes").where("sender", "==", sender).orderBy("createdAt", "desc").limit(5).get();
+             toolResponseData = { notes: snapshot.docs.map(d => ({ id: d.id, title: d.data().title, content: d.data().content })) };
+          }
+          else if (call.name === "delete_note") {
+             const note_id = (call.args as any).note_id;
+             try {
+                await db.collection("notes").doc(note_id).delete();
+                toolResponseData = { success: true, message: "Terhapus." };
+             } catch(e) {
+                toolResponseData = { success: false, error: String(e) };
+             }
+          }
+          else if (call.name === "update_note") {
+             const { note_id, new_title, new_content } = call.args as any;
+             try {
+                await db.collection("notes").doc(note_id).update({ title: new_title, content: new_content, updatedAt: FieldValue.serverTimestamp() });
+                toolResponseData = { success: true, message: "Terperbarui." };
+             } catch(e) {
+                toolResponseData = { success: false, error: String(e) };
+             }
+          }
+
+          historyCopied.push({ role: "model", parts: [{ functionCall: call }] });
+          historyCopied.push({ 
+            role: "user", 
+            parts: [{ functionResponse: { name: call.name, response: toolResponseData } }] 
           });
 
-          const localTime = targetTime.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-          reply = `Oke! Aku sudah mencatat pengingatnya. Aku akan mengingatkanmu pesan: "${reminder_message}" pada ${localTime}. 🕰️`;
-        } catch (e: any) {
-          console.error("Error setting reminder:", e);
-          reply = "Maaf, aku kesulitan mengatur waktu pengingat di sistem. Coba lagi dengan format yang lebih jelas ya.";
+          finalHistoryToSave = [...historyCopied];
+          loopCount++;
+        } else {
+          return response.text || "";
         }
       }
-    } else {
-      reply = response.text || "Maaf, aku tidak bisa memproses permintaan itu saat ini.";
-    }
+      return "Maaf, permintaannya terlalu rumit untukku saat ini.";
+    };
+
+    let reply = await generateResponseRecursive(cleanHistory);
+    if (!reply || reply.trim() === "") reply = "Maaf, aku tidak bisa memproses permintaan itu saat ini.";
 
     const limit = typeof globalSettings.maxMemory === 'number' ? globalSettings.maxMemory : 10;
 
@@ -192,7 +296,7 @@ Jika pengguna meminta untuk diingatkan di waktu tertentu (misalnya "jam 9 ingatk
           sender,
           name: contactData.name || name || sender,
           history: [
-            ...cleanHistory,
+            ...finalHistoryToSave,
             { role: "model", parts: [{ text: reply }] }
           ].slice(-limit), // Batasi penyimpanan
           updatedAt: FieldValue.serverTimestamp()

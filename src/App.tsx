@@ -1,5 +1,68 @@
 import { useState, useEffect } from 'react';
-import { Settings, Users, BookOpen, Activity, Save } from 'lucide-react';
+import { Settings, Users, BookOpen, Activity, Save, BarChart2, FileText, Bell, Clock, RefreshCw } from 'lucide-react';
+
+function OverviewTab() {
+  const [stats, setStats] = useState<any>({ totalMessages: 0, activeUsers: 0, totalReminders: 0, totalNotes: 0 });
+  const [loading, setLoading] = useState(true);
+  const [cronLoading, setCronLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/stats').then(r => r.json()).then(data => {
+      setStats(data);
+      setLoading(false);
+    });
+  }, []);
+
+  const triggerCron = async () => {
+    setCronLoading(true);
+    try {
+      const res = await fetch('/api/cron', { method: 'POST' });
+      const data = await res.json();
+      alert(`Manual trigger sukses!\nPengingat terkirim: ${data.remindersSent}\nLaporan Pagi Terkirim: ${data.morningReportsSent}`);
+    } catch (e: any) {
+      alert(`Gagal trigger cron: ${e.message}`);
+    }
+    setCronLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Ringkasan Sistem</h2>
+      
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border rounded-xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-2"><Users size={16}/> Pengguna Aktif</p>
+          <p className="text-3xl font-bold text-gray-800">{loading ? '-' : stats.activeUsers}</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-2"><BarChart2 size={16}/> Total Pesan</p>
+          <p className="text-3xl font-bold text-gray-800">{loading ? '-' : stats.totalMessages}</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-2"><Bell size={16}/> Pengingat</p>
+          <p className="text-3xl font-bold text-gray-800">{loading ? '-' : stats.totalReminders}</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500 font-medium mb-1 flex items-center gap-2"><FileText size={16}/> Buku Catatan</p>
+          <p className="text-3xl font-bold text-gray-800">{loading ? '-' : stats.totalNotes}</p>
+        </div>
+      </div>
+
+      <div className="mt-8 bg-blue-50 border border-blue-100 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center gap-2"><Clock size={20}/> Eksekusi Cron Manual</h3>
+        <p className="text-sm text-blue-700 mb-4">Gunakan tombol ini untuk menjalankan sistem pengecekan pengingat dan laporan pagi tanpa harus menunggu jadwal cronjob dari pihak ketiga. Berguna untuk keperluan testing.</p>
+        <button 
+          onClick={triggerCron}
+          disabled={cronLoading}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition disabled:opacity-50"
+        >
+          <RefreshCw size={18} className={cronLoading ? 'animate-spin' : ''} />
+          {cronLoading ? 'Menjalankan...' : 'Jalankan Cron Sekarang'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function SetupStatusTab() {
   const webhookUrl = `${import.meta.env.VITE_APP_URL || window.location.origin}/api/webhook`;
@@ -63,8 +126,8 @@ function SetupStatusTab() {
       </section>
       
       <section>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">3. Setup Pengingat (Cron Job)</h2>
-        <p className="mb-2 text-sm">Agar asisten AI dapat mengirim pesan pengingat sesuai jadwal (misalnya "besok pagi ingatkan saya"), Anda harus memicu cron URL ini setiap 1 menit. Anda dapat menggunakan layanan gratis seperti <a href="https://cron-job.org/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">cron-job.org</a>.</p>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">3. Setup Fitur Pengingat & Laporan Eksekutif Pagi (Cron Job)</h2>
+        <p className="mb-2 text-sm">Agar asisten AI dapat mengingatkan Anda serta mengirimkan <b>Laporan Pagi Eksekutif</b> (sapaan, jadwal hari ini, & riwayat catatan) pada jam 6 pagi, Anda harus men-trigger sistem setiap 1 menit. Anda dapat menggunakan layanan gratis seperti <a href="https://cron-job.org/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">cron-job.org</a>.</p>
         <div className="bg-gray-100 p-3 rounded flex items-center justify-between border border-gray-200">
           <code className="text-sm text-pink-600 break-all">{import.meta.env.VITE_APP_URL || window.location.origin}/api/cron</code>
           <button 
@@ -74,20 +137,124 @@ function SetupStatusTab() {
             Copy URL
           </button>
         </div>
-        <ol className="list-decimal pl-5 mt-3 space-y-1 text-sm">
+        <ol className="list-decimal pl-5 mt-3 space-y-1 text-sm bg-blue-50/50 p-4 rounded border border-blue-100">
           <li>Daftar/Login ke cron-job.org</li>
           <li>Buat Cronjob baru (Create Cronjob)</li>
           <li>Paste URL di atas ke kolom URL</li>
           <li>Set jadwal eksekusi menjadi <b>Every 1 minute</b></li>
-          <li>Simpan, dan asisten Anda siap mengingatkan apapun secara otomatis!</li>
+          <li>Simpan. Asisten Anda kini mendukung Pengingat (Reminder) Otomatis dan Laporan Eksekutif setiap pagi jam 6!</li>
         </ol>
+
+        <div className="mt-6 bg-white p-4 rounded border border-gray-200 shadow-sm">
+           <h3 className="text-lg font-medium text-gray-800 mb-2">✨ Fitur Baru Tersedia</h3>
+           <ul className="list-disc pl-5 text-sm space-y-2">
+             <li><b>Buku Catatan AI:</b> Anda sekarang bisa menyuruh AIDA menyimpan info penting, mencari catatan, memperbarui, hingga menghapusnya nanti.</li>
+             <li><b>Laporan Pagi Eksekutif:</b> Setiap jam 6 pagi AIDA akan memeriksa pengingat hari itu, merangkum riwayat catatan terakhir, dan mengirimkan pesan motivasi pagi ala asisten profesional.</li>
+             <li><b>Pengingat Terjadwal:</b> Minta AIDA untuk "Ingatkan saya meeting besok jam 10 pagi".</li>
+           </ul>
+        </div>
       </section>
     </div>
   );
 }
 
+function NotesTab() {
+  const [notes, setNotes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingNote, setEditingNote] = useState<any>(null);
+
+  const fetchNotes = () => {
+    setLoading(true);
+    fetch('/api/dashboard-notes').then(r => r.json()).then(data => {
+      setNotes(data.notes || []);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { fetchNotes(); }, []);
+
+  const saveNote = async () => {
+    if (!editingNote.title?.trim() || !editingNote.content?.trim()) {
+       alert("Judul dan isi tidak boleh kosong.");
+       return;
+    }
+    await fetch('/api/dashboard-notes', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editingNote)
+    });
+    setEditingNote(null);
+    fetchNotes();
+  };
+
+  const deleteNote = async (id: string) => {
+    if (!confirm("Hapus catatan ini?")) return;
+    await fetch('/api/dashboard-notes', {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    fetchNotes();
+  };
+
+  if (editingNote) {
+     return (
+       <div className="space-y-6">
+         <button onClick={() => setEditingNote(null)} className="text-sm text-blue-600 hover:underline mb-4">← Kembali</button>
+         <h2 className="text-xl font-bold">Edit Catatan</h2>
+         <div>
+            <label className="block text-sm font-medium mb-1">Judul</label>
+            <input 
+              value={editingNote.title} 
+              onChange={e => setEditingNote({...editingNote, title: e.target.value})}
+              className="w-full p-2 border rounded"
+            />
+         </div>
+         <div>
+            <label className="block text-sm font-medium mb-1">Isi Catatan</label>
+            <textarea 
+              value={editingNote.content} 
+              onChange={e => setEditingNote({...editingNote, content: e.target.value})}
+              className="w-full h-40 p-2 border rounded"
+            />
+         </div>
+         <button onClick={saveNote} className="bg-blue-600 text-white px-4 py-2 rounded">Simpan</button>
+       </div>
+     );
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Buku Catatan AI</h2>
+      <p className="text-sm text-gray-600 mb-4">Daftar semua informasi yang diingat atau dicatat oleh asisten AIDA untuk pengguna Anda.</p>
+      
+      {loading ? <p>Memuat catatan...</p> : (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {notes.map(note => (
+               <div key={note.id} className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl shadow-sm flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                     <h3 className="font-bold text-gray-800 line-clamp-1" title={note.title}>{note.title}</h3>
+                     <span className="text-[10px] text-gray-500 bg-white px-2 py-1 rounded-full border">{note.sender}</span>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 flex-1">{note.content}</p>
+                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-yellow-200">
+                     <span className="text-xs text-gray-500">{new Date(note.createdAt).toLocaleDateString('id-ID')}</span>
+                     <div className="flex gap-3">
+                        <button onClick={() => setEditingNote(note)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                        <button onClick={() => deleteNote(note.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Hapus</button>
+                     </div>
+                  </div>
+               </div>
+            ))}
+            {notes.length === 0 && <p className="text-gray-500 italic col-span-full">Belum ada catatan.</p>}
+         </div>
+      )}
+    </div>
+  );
+}
+
 function GlobalSettingsTab() {
-  const [settings, setSettings] = useState({ systemPrompt: "", creativity: 0.7, maxMemory: 10 });
+  const [settings, setSettings] = useState({ systemPrompt: "", creativity: 0.7, maxMemory: 10, morningReportTime: 6, morningReportEnabled: true });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -122,32 +289,70 @@ function GlobalSettingsTab() {
         <p className="text-xs text-gray-500 mt-1">Instruksi utama untuk perilaku AI.</p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Kreativitas (Temperature): {settings.creativity}
-        </label>
-        <input 
-          type="range" min="0" max="2" step="0.1" 
-          value={settings.creativity}
-          onChange={e => setSettings({...settings, creativity: parseFloat(e.target.value)})}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-gray-500">
-          <span>Kaku & Akurat (0.0)</span>
-          <span>Sangat Kreatif (2.0)</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Kreativitas (Temperature): {settings.creativity}
+          </label>
+          <input 
+            type="range" min="0" max="2" step="0.1" 
+            value={settings.creativity}
+            onChange={e => setSettings({...settings, creativity: parseFloat(e.target.value)})}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>Kaku & Akurat (0.0)</span>
+            <span>Sangat Kreatif (2.0)</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Batas Ingatan (Maksimal Pesan History)
+          </label>
+          <input 
+            type="number" min="1" max="50"
+            value={settings.maxMemory}
+            onChange={e => setSettings({...settings, maxMemory: parseInt(e.target.value)})}
+            className="w-full p-2 border rounded-lg"
+          />
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Batas Ingatan (Maksimal Pesan History)
-        </label>
-        <input 
-          type="number" min="1" max="50"
-          value={settings.maxMemory}
-          onChange={e => setSettings({...settings, maxMemory: parseInt(e.target.value)})}
-          className="w-full p-2 border rounded-lg"
-        />
+      <div className="border-t pt-6 mt-6">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Pengaturan Laporan Pagi</h3>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              id="morningReportEnabled"
+              checked={settings.morningReportEnabled}
+              onChange={e => setSettings({...settings, morningReportEnabled: e.target.checked})}
+              className="w-5 h-5 text-blue-600 rounded"
+            />
+            <label htmlFor="morningReportEnabled" className="text-sm font-medium text-gray-700">
+              Aktifkan Laporan Pagi Otomatis
+            </label>
+          </div>
+          
+          {settings.morningReportEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Jam Kirim Laporan (Waktu Jakarta / UTC+7)
+              </label>
+              <select 
+                value={settings.morningReportTime}
+                onChange={e => setSettings({...settings, morningReportTime: parseInt(e.target.value)})}
+                className="w-full md:w-48 p-2 border rounded-lg"
+              >
+                {[...Array(24)].map((_, i) => (
+                  <option key={i} value={i}>{`${i.toString().padStart(2, '0')}:00`}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Laporan pagi akan dikirimkan pada jam ini setiap hari.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <button onClick={saveSettings} disabled={saving} className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded shadow hover:bg-blue-700 disabled:opacity-50">
@@ -202,6 +407,7 @@ function ContactsTab() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [logs, setLogs] = useState<any[] | null>(null);
 
   const fetchContacts = () => {
     setLoading(true);
@@ -224,6 +430,38 @@ function ContactsTab() {
     setEditing(null);
     fetchContacts();
   };
+
+  const viewLogs = async (sender: string) => {
+     setLogs([]);
+     const res = await fetch(`/api/dashboard-logs?sender=${sender}`);
+     const data = await res.json();
+     setLogs(data.history || []);
+  };
+
+  if (logs !== null) {
+      return (
+         <div className="space-y-6">
+            <button onClick={() => setLogs(null)} className="text-sm text-blue-600 hover:underline mb-4">← Kembali</button>
+            <h2 className="text-2xl font-bold text-gray-800">Log Percakapan</h2>
+            <div className="bg-gray-50 border rounded-lg p-4 h-96 overflow-y-auto space-y-4">
+               {logs.length === 0 && <p className="text-gray-500 text-sm">Belum ada history.</p>}
+               {logs.map((msg, i) => (
+                  <div key={i} className={`flex flex-col ${msg.role === 'model' ? 'items-start' : 'items-end'}`}>
+                    <div className={`max-w-[80%] rounded-xl p-3 text-sm ${msg.role === 'model' ? 'bg-white border text-gray-800' : 'bg-blue-600 text-white'}`}>
+                       {msg.parts.map((p: any, j: number) => {
+                          if (p.text) return <p key={j} className="whitespace-pre-wrap">{p.text}</p>;
+                          if (p.functionCall) return <p key={j} className="text-xs italic opacity-75">🔧 Alat dipanggil: {p.functionCall.name}</p>;
+                          if (p.functionResponse) return <p key={j} className="text-xs italic opacity-75">✅ Hasil alat diterima.</p>;
+                          return null;
+                       })}
+                    </div>
+                    <span className="text-[10px] text-gray-400 mt-1">{msg.role === 'model' ? 'AIDA' : 'User'}</span>
+                  </div>
+               ))}
+            </div>
+         </div>
+      );
+  }
 
   if (editing) {
     return (
@@ -271,8 +509,8 @@ function ContactsTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Manajemen Kontak & Personal AI</h2>
-      <p className="text-sm text-gray-600">Daftar kontak yang pernah berinteraksi dengan AI. Anda dapat mematikan AI (Human Takeover) atau memberikan catatan spesifik pada kontak tertentu.</p>
+      <h2 className="text-2xl font-bold text-gray-800">Manajemen Pengguna & Personal AI</h2>
+      <p className="text-sm text-gray-600">Daftar pengguna yang pernah berinteraksi dengan AI. Anda dapat mematikan AI (Human Takeover) atau memberikan catatan spesifik pada kontak tertentu.</p>
       
       {loading ? <p>Memuat data kontak...</p> : (
         <div className="bg-white rounded-lg border overflow-hidden">
@@ -280,7 +518,7 @@ function ContactsTab() {
             <table className="w-full text-left bg-white min-w-[500px]">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="p-3 text-sm font-medium text-gray-600">Pengirim (Nomor)</th>
+                  <th className="p-3 text-sm font-medium text-gray-600">Pengguna (Nomor)</th>
                   <th className="p-3 text-sm font-medium text-gray-600">Pesan</th>
                   <th className="p-3 text-sm font-medium text-gray-600">Takeover?</th>
                   <th className="p-3 text-sm font-medium text-gray-600">Aksi</th>
@@ -301,7 +539,10 @@ function ContactsTab() {
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Aktif AI</span>
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 flex gap-3">
+                      <button onClick={() => viewLogs(c.sender)} className="text-gray-600 hover:text-gray-900 text-sm font-medium">
+                        Logs
+                      </button>
                       <button onClick={() => setEditing(c)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
                         Edit
                       </button>
@@ -323,7 +564,7 @@ function ContactsTab() {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('settings');
+  const [activeTab, setActiveTab] = useState('overview');
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -337,12 +578,28 @@ export default function App() {
         </div>
         <nav className="flex-1 px-4 space-y-2">
           <button 
+            onClick={() => setActiveTab('overview')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'overview' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Activity size={18} /> Ringkasan
+          </button>
+          <button 
+            onClick={() => setActiveTab('notes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'notes' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <FileText size={18} /> Buku Catatan
+          </button>
+          <button 
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
               activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <Settings size={18} /> Global Settings
+            <Settings size={18} /> Pengaturan Global
           </button>
           <button 
             onClick={() => setActiveTab('knowledge')}
@@ -350,7 +607,7 @@ export default function App() {
               activeTab === 'knowledge' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <BookOpen size={18} /> Knowledge Base
+            <BookOpen size={18} /> Basis Pengetahuan
           </button>
           <button 
             onClick={() => setActiveTab('contacts')}
@@ -358,7 +615,7 @@ export default function App() {
               activeTab === 'contacts' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
-            <Users size={18} /> Contacts & Takeover
+            <Users size={18} /> Manajemen Pengguna
           </button>
           <button 
             onClick={() => setActiveTab('status')}
@@ -382,12 +639,16 @@ export default function App() {
         <div className="max-w-4xl mx-auto bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8 md:p-10 min-h-[80vh]">
           {/* Mobile menu fallback for demo/simplicity */}
           <div className="sm:hidden flex gap-2 overflow-x-auto mb-6 pb-2 border-b">
+             <button onClick={() => setActiveTab('overview')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Ringkasan</button>
+             <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'notes' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Catatan</button>
              <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'settings' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Settings</button>
              <button onClick={() => setActiveTab('knowledge')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'knowledge' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Knowledge</button>
-             <button onClick={() => setActiveTab('contacts')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'contacts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Contacts</button>
+             <button onClick={() => setActiveTab('contacts')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'contacts' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Pengguna</button>
              <button onClick={() => setActiveTab('status')} className={`px-4 py-2 whitespace-nowrap rounded-lg text-sm ${activeTab === 'status' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100'}`}>Status</button>
           </div>
           
+          {activeTab === 'overview' && <OverviewTab />}
+          {activeTab === 'notes' && <NotesTab />}
           {activeTab === 'settings' && <GlobalSettingsTab />}
           {activeTab === 'knowledge' && <KnowledgeTab />}
           {activeTab === 'contacts' && <ContactsTab />}

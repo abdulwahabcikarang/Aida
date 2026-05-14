@@ -1,5 +1,6 @@
 import * as adminImport from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
+import { GoogleGenAI } from "@google/genai";
 
 const admin = adminImport.default || adminImport;
 
@@ -18,6 +19,54 @@ function getDb() {
   return _db;
 }
 
+let ai: GoogleGenAI | null = null;
+function getAi() {
+  if (!ai) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is required");
+    }
+    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+  return ai;
+}
+
+async function generateMorningReport(sender: string, name: string, db: FirebaseFirestore.Firestore, jakartaTime: Date) {
+   const genAi = getAi();
+   
+   // Get Reminders today for this specific user
+   const remsSnap = await db.collection("reminders").where("sender", "==", sender).where("status", "==", "pending").get();
+   const userReminders = remsSnap.docs.map(d => {
+       const dt = d.data().time?.toDate ? d.data().time.toDate() : new Date(d.data().time);
+       return { msg: d.data().message, time: dt };
+   }).filter(r => r.time.getTime() < Date.now() + 24 * 60 * 60 * 1000);
+
+   const notesSnap = await db.collection("notes").where("sender", "==", sender).orderBy("createdAt", "desc").limit(5).get();
+   const recentNotes = notesSnap.docs.map(d => ({ title: d.data().title }));
+
+   const prompt = `Ini adalah tugas Laporan Pagi Eksekutif otomatis.
+Sapa pengguna ini dengan hangat. Namanya adalah: ${name}.
+Waktu saat ini (Jakarta): ${jakartaTime.toLocaleString("id-ID")}.
+
+Pengingat hari ini:
+${userReminders.length > 0 ? userReminders.map((r, i) => `- ${r.time.toLocaleString("id-ID", {timeZone:"Asia/Jakarta"})} : ${r.msg}`).join("\n") : "Tidak ada jadwal khusus."}
+
+Topik/catatan terakhir di Buku Catatan:
+${recentNotes.length > 0 ? recentNotes.map((r, i) => `- ${r.title}`).join("\n") : "Tidak ada catatan."}
+
+Instruksi:
+Tuliskan 1 pesan laporan pagi (Morning Report) ala asisten eksekutif cerdas (namamu AIDA).
+Berikan sapaan semangat, sebutkan cuaca secara umum (seperti "semoga hari cerah"), 
+daftar pekerjaan/pengingat (format rapi), dan sebutkan secara singkat bahwa kamu mengingat catatan-catatan terakhir mereka.
+Jangan gunakan intro/outro. Tulis pesan langsung yang siap dikirim di WhatsApp. Pastikan menggunakan Emoji.`;
+
+   const response = await genAi.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: { temperature: 0.8 }
+   });
+   return response.text || "Selamat pagi! Semoga harimu menyenangkan bersama AIDA. 😊";
+}
+
 export default async function handler(req: any, res: any) {
   // Hanya proses jika metoda adalah GET atau POST
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -27,8 +76,58 @@ export default async function handler(req: any, res: any) {
   try {
     const db = getDb();
     const now = new Date();
+    const fonnteToken = process.env.FONNTE_TOKEN;
+    if (!fonnteToken) {
+      return res.status(500).json({ error: "Missing FONNTE_TOKEN" });
+    }
+
+    let reportSent = 0;
     
-    // Cari semua pengingat yang statusnya "pending"
+    // ============================================
+    // 1. LAPORAN PAGI EKSEKUTIF
+    // ============================================
+    const settingsDoc = await db.collection("settings").doc("global").get();
+    const settings = settingsDoc.exists ? settingsDoc.data() : {};
+    const reportTime = typeof settings?.morningReportTime === 'number' ? settings.morningReportTime : 6;
+    const reportEnabled = settings?.morningReportEnabled !== false;
+
+    const jakartaTimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
+    const jakartaTime = new Date(jakartaTimeStr);
+    const dateString = `${jakartaTime.getFullYear()}-${jakartaTime.getMonth() + 1}-${jakartaTime.getDate()}`;
+    
+    // Jika jam sesuai dengan yang di-setting (Cron berjalan setiap menit)
+    if (reportEnabled && jakartaTime.getHours() === reportTime) {
+       const chatSnapshot = await db.collection("chats").get();
+       for (const doc of chatSnapshot.docs) {
+          const chatData = doc.data();
+          if (chatData.lastMorningReportDate !== dateString && chatData.sender) {
+             const sender = chatData.sender;
+             const userName = chatData.name || "Bapak/Ibu";
+             
+             try {
+                const reportMsg = await generateMorningReport(sender, userName, db, jakartaTime);
+                
+                await fetch("https://api.fonnte.com/send", {
+                  method: "POST",
+                  headers: { "Authorization": fonnteToken, "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    target: sender, 
+                    message: reportMsg 
+                  })
+                });
+                
+                await doc.ref.update({ lastMorningReportDate: dateString });
+                reportSent++;
+             } catch(e) {
+                console.error(`Gagal kirim Morning Report ke ${sender}`, e);
+             }
+          }
+       }
+    }
+
+    // ============================================
+    // 2. PENGIRIMAN PENGINGAT (REMINDERS)
+    // ============================================
     const snapshot = await db.collection("reminders")
       .where("status", "==", "pending")
       .get();
@@ -41,13 +140,8 @@ export default async function handler(req: any, res: any) {
       return reminderTime <= now;
     });
 
-    if (dueDocs.length === 0) {
-      return res.status(200).json({ status: "ok", sent: 0, message: "Tidak ada pengingat yang jatuh tempo saat ini." });
-    }
-
-    const fonnteToken = process.env.FONNTE_TOKEN;
-    if (!fonnteToken) {
-      return res.status(500).json({ error: "Missing FONNTE_TOKEN" });
+    if (dueDocs.length === 0 && reportSent === 0) {
+      return res.status(200).json({ status: "ok", sent: 0, message: "Tidak ada tugas." });
     }
 
     let sentCount = 0;
@@ -93,7 +187,7 @@ export default async function handler(req: any, res: any) {
       }
     }
     
-    return res.status(200).json({ status: "ok", sent: sentCount });
+    return res.status(200).json({ status: "ok", remindersSent: sentCount, morningReportsSent: reportSent });
 
   } catch (error: any) {
     console.error("Cron Error:", error);
