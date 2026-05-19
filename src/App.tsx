@@ -561,6 +561,53 @@ function ContactsTab() {
           />
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Kota Saat Ini</label>
+            <input 
+              type="text" value={editing.city || ''}
+              onChange={e => setEditing({...editing, city: e.target.value})}
+              className="w-full p-2 border rounded-lg"
+              placeholder="Contoh: Jakarta"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Hobi</label>
+            <input 
+              type="text" value={editing.hobby || ''}
+              onChange={e => setEditing({...editing, hobby: e.target.value})}
+              className="w-full p-2 border rounded-lg"
+              placeholder="Contoh: Membaca, Bersepeda"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Minat / Kesukaan Lainnya</label>
+            <input 
+              type="text" value={editing.interest || ''}
+              onChange={e => setEditing({...editing, interest: e.target.value})}
+              className="w-full p-2 border rounded-lg"
+              placeholder="Contoh: Teknologi, Film Sci-Fi"
+            />
+          </div>
+        </div>
+
+        {editing.smartProfile && Object.keys(editing.smartProfile).length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-sm">
+            <h3 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-1">✨ Profil Pintar (Auto-Ekstrak AI)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {Object.keys(editing.smartProfile).map(key => {
+                const sp = editing.smartProfile[key];
+                return (
+                  <div key={key} className="bg-white p-2 rounded border border-blue-100">
+                    <p className="text-[10px] uppercase font-bold text-blue-500 mb-0.5">{sp.displayKey}</p>
+                    <p className="text-sm text-gray-800">{sp.value}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Instruksi Spesifik untuk Nomor ini</label>
           <textarea 

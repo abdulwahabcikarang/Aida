@@ -85,7 +85,7 @@ Instruksi:
 Tuliskan 1 pesan laporan pagi (Morning Report) ala asisten eksekutif cerdas (namamu AIDA).
 Berikan sapaan semangat, sebutkan cuaca secara umum (seperti "semoga hari cerah"), 
 daftar pekerjaan/pengingat (format rapi), dan sebutkan secara singkat bahwa kamu mengingat catatan-catatan terakhir mereka.
-Jangan gunakan intro/outro. Tulis pesan langsung yang siap dikirim di WhatsApp. Pastikan menggunakan Emoji.`;
+Jangan gunakan intro/outro. Tulis pesan langsung yang siap dikirim di WhatsApp tanpa kalimat pengantar seperti "Tentu, ini draf pesannya:". Pastikan menggunakan Emoji.`;
 
   const response = await genAi.models.generateContent({
     model: "gemini-2.5-flash",
@@ -234,6 +234,7 @@ Instruksi PENTING:
 - Tuliskan pesan singkat yang kasual, santai, seolah-olah chat dari asisten teman sendiri tanpa pembukaan kaku (JANGAN gunakan sapaan formal atau tulisan "Halo AIDA di sini"). Langsung saja seperti mengajak ngobrol.
 - Tanyakan kabarnya atau bagaimana harinya berjalan. Jangan menggurui. Bisa bahas sedikit konteks / kesukaan jika kamu tahu.
 - Jangan tulis salam pembuka/penutup.
+- DILARANG menggunakan awalan seperti "Tentu, ini draf pesannya:". Langsung tulis pesannya.
 - Sertakan emoji sewajarnya.`;
 
                 const genAi = getAi();
@@ -297,6 +298,7 @@ Instruksi PENTING:
 - Tanyakan kabarnya hari ini atau bagaimana harinya berjalan. 
 - Tanya apakah ada sesuatu yang ingin ia ceritakan atau tulis untuk disimpan ke buku hariannya malam ini.
 - Jangan terlalu panjang. Sekitar 2-3 kalimat santai.
+- DILARANG menggunakan awalan komputasional seperti "Tentu, ini draf sapaan malam otomatisnya:". Langsung tulis pesannya saja seolah dari chat WA yang asli.
 - Sertakan emoji yang menenangkan (seperti 🌙, 🍵, 📔, dll).`;
 
             const genAi = getAi();

@@ -39,20 +39,27 @@ export default async function handler(req: any, res: any) {
           name: data.name || doc.id,
           sender: data.sender || doc.id,
           instruction: data.instruction || "",
+          city: data.city || "",
+          hobby: data.hobby || "",
+          interest: data.interest || "",
           humanTakeover: !!data.humanTakeover,
           messageCount: data.history ? data.history.length : 0,
+          smartProfile: data.smartProfile || {},
           updatedAt: data.updatedAt ? data.updatedAt.toDate() : null
         });
       });
       return res.status(200).json({ contacts });
     } else if (req.method === 'POST') {
-      const { id, name, instruction, humanTakeover } = req.body || {};
+      const { id, name, instruction, humanTakeover, city, hobby, interest } = req.body || {};
       if (!id) return res.status(400).json({ error: "Missing contact id" });
       
       await chatsRef.doc(id).set({
         name: name || id,
         instruction: instruction || "",
-        humanTakeover: !!humanTakeover
+        humanTakeover: !!humanTakeover,
+        city: city || "",
+        hobby: hobby || "",
+        interest: interest || ""
       }, { merge: true });
       return res.status(200).json({ status: "ok" });
     } else {

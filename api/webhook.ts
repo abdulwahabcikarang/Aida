@@ -49,11 +49,17 @@ export default async function handler(req: any, res: any) {
   try {
     const body = req.body || {};
     const sender = body.sender;
-    const message = body.message || body.text;
+    let incomingMsg = (body.message || body.text || "").trim();
     const name = body.name;
 
+    if (!incomingMsg && body.url) {
+      incomingMsg = `[Menerima file berupa ${body.type || 'lampiran'} dari user. URL file: ${body.url}]`;
+    } else if (body.url) {
+      incomingMsg += `\n[Catatan: Pesan ini dilampirkan berbarengan dengan sebuah file/dokumen berjenis ${body.type || 'lampiran'}. Kamu bsia menyebutkan bahwa kamu telah menerima link file nya di url: ${body.url}]`;
+    }
+
     // Fonnte initial validation step
-    if (!sender || !message) {
+    if (!sender || !incomingMsg) {
       return res.status(200).json({ status: "ok", detail: "Payload received but missing sender or message" });
     }
 
@@ -113,6 +119,23 @@ export default async function handler(req: any, res: any) {
     if (globalSettings.knowledgeBase && globalSettings.knowledgeBase.trim() !== "") {
       finalSystemPrompt += `\n\n--- PENGETAHUAN TAMBAHAN ---\n${globalSettings.knowledgeBase}\n--------------------------`;
     }
+    
+    let userDetails = "";
+    if (contactData.city) userDetails += `- Kota Sekarang: ${contactData.city}\n`;
+    if (contactData.hobby) userDetails += `- Hobi: ${contactData.hobby}\n`;
+    if (contactData.interest) userDetails += `- Minat: ${contactData.interest}\n`;
+    
+    if (contactData.smartProfile) {
+       for (const key in contactData.smartProfile) {
+          const p = contactData.smartProfile[key];
+          userDetails += `- ${p.displayKey}: ${p.value}\n`;
+       }
+    }
+    
+    if (userDetails !== "") {
+      finalSystemPrompt += `\n\n--- PROFIL PINGTAR PENGGUNA INI ---\n${userDetails}`;
+    }
+
     if (contactData.instruction && contactData.instruction.trim() !== "") {
       finalSystemPrompt += `\n\n--- CATATAN TENTANG PENGGUNA INI ---\n${contactData.instruction}`;
     }
@@ -125,10 +148,36 @@ export default async function handler(req: any, res: any) {
     const systemInstruction = `${finalSystemPrompt}\n\nWaktu saat ini (waktu Indonesia/Jakarta): ${timeInJakarta}. 
 Jika pengguna meminta dijadwalkan pengingat, gunakan tool 'schedule_reminder'.
 Jika pengguna memberikan jurnal harian atau ditanya tentang harinya lalu bercerita, gunakan tool 'save_journal'.
-Jika pengguna meminta untuk mencatat ringkasan sesuatu yang lain (bukan jurnal harian), gunakan tool 'save_note', 'search_notes', 'update_note', atau 'delete_note'.
-PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
+Jika Anda mendeteksi atau diberitahu informasi profil tentang pengguna secara natural (misal: alamat, tempat kerja, hobi kegemaran, makanan kesukaan, dll), SECARA OTOMATIS panggil tool 'update_user_profile' untuk merekamnya di Buku Profil Pintar.
+Jika pengguna meminta untuk mencatat ringkasan hal (ide/proyek) lainnya yang panjang, gunakan tool 'save_note' dkk.
+PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.
+DILARANG KERAS menggunakan kalimat basa-basi pengantar seperti "Berikut adalah pesan/drafnya", "Tentu, ini balasannya:", atau "Baik, pesan untuk nona adalah:". Langsung tulis isi pesannya 100% natural.`;
 
     const toolsList: any[] = [
+      {
+        name: "send_message_to_contact",
+        description: "Mengirim pesan WhatsApp kepada pengguna lain berdasarkan namanya yg tercermin di manajamen pengguna. Gunakan jika pengguna meminta tolong menyampaikan sesuatu misal 'beritahu nona untuk membawa tas'. AI harus bahasakan secara natural.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            target_name: { type: "STRING", description: "Nama orang yang dituju untuk pesan, misal 'nona'" },
+            message: { type: "STRING", description: "Isi pesan yang dikirimkan kepada orang tersebut. Pesan yang diisikan di sini akan langsung dikirim oleh AIDA." }
+          },
+          required: ["target_name", "message"]
+        }
+      },
+      {
+        name: "update_user_profile",
+        description: "Menambahkan atau memperbarui informasi spesifik ke profil pintar (smart profile) pengguna. Gunakan secara otomatis jika mengetahui fakta baru tentang pengguna (misal: profesi, alamat/kota, makanan kesukaan, kesukaan/opsi, hobi).",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            category: { type: "STRING", description: "Kategori profil, misalnya: 'Kota/Alamat', 'Hobi', 'Minat', 'Profesi', 'Email', 'Makanan Favorit', 'Lainnya'" },
+            value: { type: "STRING", description: "Isi atau nilai untuk kategori tersebut. Jika sebelumnya ada, AI harus menggabungkan/memperlengkapinya di argumen ini." }
+          },
+          required: ["category", "value"]
+        }
+      },
       {
         name: "save_journal",
         description: "Menyimpan catatan harian pengguna (diary) dari ceritanya hari ini ke basis data catatan harian khusus.",
@@ -229,7 +278,7 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
       ]
     };
 
-    cleanHistory.push({ role: "user", parts: [{ text: message }] });
+    cleanHistory.push({ role: "user", parts: [{ text: incomingMsg }] });
 
     let finalHistoryToSave = [...cleanHistory];
 
@@ -264,6 +313,43 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
               return "Maaf, ada kendala mengatur pengingat.";
             }
           }
+          else if (call.name === "update_user_profile") {
+            const { category, value } = call.args as any;
+            try {
+              const cleanedCategory = String(category).toLowerCase().replace(/[^a-z0-9_]/g, '_');
+              const currentProfile = contactData.smartProfile || {};
+              currentProfile[cleanedCategory] = {
+                displayKey: category,
+                value: value,
+                updatedAt: new Date().toISOString()
+              };
+              
+              const updatePayload: any = { smartProfile: currentProfile };
+              
+              // Also map some explicit fields if matching
+              if (cleanedCategory.includes('kota') || cleanedCategory.includes('alamat')) updatePayload.city = value;
+              if (cleanedCategory.includes('hobi')) updatePayload.hobby = value;
+              if (cleanedCategory.includes('minat')) updatePayload.interest = value;
+
+              await chatRef.set(updatePayload, { merge: true });
+              
+              historyCopied.push({
+                 role: "model",
+                 parts: [{ functionCall: call }]
+              });
+              historyCopied.push({
+                 role: "function",
+                 parts: [{ functionResponse: { name: call.name, response: { success: true, message: `Buku Profil Pintar berhasil diperbarui untuk kategori: ${category}` } } }]
+              });
+              
+              // Inform AI that tool works, continue generating response seamlessly
+              // To do this we must continue loop
+              loopCount++;
+              continue;
+            } catch (e) {
+              return "Gagal memperbarui profil pengguna.";
+            }
+          }
           else if (call.name === "save_journal") {
              const { content } = call.args as any;
              await db.collection("journals").add({ sender, content, date: new Date().toISOString().split('T')[0], createdAt: FieldValue.serverTimestamp() });
@@ -279,7 +365,37 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
           // We need to return result to Gemini so it can answer the user
           let toolResponseData: any = { error: "Unknown function" };
           
-          if (call.name === "search_notes") {
+          if (call.name === "send_message_to_contact") {
+             const { target_name, message } = call.args as any;
+             try {
+                const contactsSnap = await db.collection("chats").get();
+                const matchedContact = contactsSnap.docs.find(d => {
+                   const cName = (d.data().name || "").toLowerCase();
+                   return cName.length > 0 && (cName.includes(target_name.toLowerCase()) || target_name.toLowerCase().includes(cName));
+                });
+                
+                if (matchedContact && matchedContact.data().sender) {
+                   const targetPhone = matchedContact.data().sender;
+                   await fetch("https://api.fonnte.com/send", {
+                      method: "POST",
+                      headers: {
+                         "Authorization": fonnteToken,
+                         "Content-Type": "application/json"
+                      },
+                      body: JSON.stringify({
+                         target: targetPhone,
+                         message: message,
+                      })
+                   });
+                   toolResponseData = { success: true, message: `Pesan sukses dikirim ke ${matchedContact.data().name || target_name}` };
+                } else {
+                   toolResponseData = { success: false, error: `Gagal. Kontak bernama mirip '${target_name}' tidak ditemukan di sistem.` };
+                }
+             } catch(e) {
+                toolResponseData = { success: false, error: String(e) };
+             }
+          }
+          else if (call.name === "search_notes") {
              const keyword = (call.args as any).keyword.toLowerCase();
              const snapshot = await db.collection("notes").where("sender", "==", sender).get();
              const notes = snapshot.docs
@@ -375,15 +491,21 @@ PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.`;
         })
       });
       
-      const fonnteData = await fonnteRes.json();
-      console.log("Fonnte API Response:", fonnteData);
+      const fonnteText = await fonnteRes.text();
+      try {
+        const fonnteData = JSON.parse(fonnteText);
+        console.log("Fonnte API Response:", fonnteData);
+      } catch (e) {
+        console.warn("Fonnte returned non-JSON:", fonnteText);
+      }
     }
 
     return res.status(200).json({ status: "success", reply });
 
   } catch (error) {
     console.error("Webhook Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: String(error) });
+    // Return 200 OK to Fonnte even on error, so it doesn't retry infinitely and drain resources or cause more errors
+    return res.status(200).json({ status: "error", error: "Internal Server Error", details: String(error) });
   }
 }
 
