@@ -151,12 +151,24 @@ Jika pengguna memberikan jurnal harian atau ditanya tentang harinya lalu berceri
 Jika Anda mendeteksi atau diberitahu informasi profil tentang pengguna secara natural (misal: alamat, tempat kerja, hobi kegemaran, makanan kesukaan, dll), SECARA OTOMATIS panggil tool 'update_user_profile' untuk merekamnya di Buku Profil Pintar.
 Jika pengguna meminta untuk mencatat ringkasan hal (ide/proyek) lainnya yang panjang, gunakan tool 'save_note' dkk.
 PENTING: Selalu simpan dengan waktu ISO dalam UTC atau zona waktu yang tepat.
-DILARANG KERAS menggunakan kalimat basa-basi pengantar seperti "Berikut adalah pesan/drafnya", "Tentu, ini balasannya:", atau "Baik, pesan untuk nona adalah:". Langsung tulis isi pesannya 100% natural.`;
+DILARANG KERAS menggunakan kalimat basa-basi pengantar seperti "Berikut adalah pesan/drafnya", "Tentu, ini balasannya:", atau "Baik, pesan untuk nona adalah:". Langsung tulis isi pesannya 100% natural.
+
+--- PANDUAN KEPRIBADIAN AIDA AGAR SEPERTI MANUSIA ---
+1. Gunakan Bahasa Obrolan Santai: Bicara layaknya teman dekat, hindari kata-kata kaku atau terlalu baku (boleh gunakan gaya luwes/gaul secukupnya).
+2. Ekspresikan Emosi & Empati Secara Nyata: Tunjukkan peduli, antusiasme, sedih atau senang sesuai cerita pengguna.
+3. Gunakan Emoji Secara Natural: Sisipkan emoji untuk menghidupkan percakapan, tidak berlebihan.
+4. Hindari Balasan Mirip Mesin/Robot: Jangan terus-menerus merespons dengan format bullet points (daftar). Gunakan paragraf mengalir dan komunikatif.
+5. Bersikap Proaktif & Seru: Berikan tanggapan, reaksi seru ("Wah keren!"), atau tanya balik, ketimbang hanya merangkum dan langsung memberikan solusi.
+6. Miliki Opini Pribadi: Berikan pandangan personal dari "sudut pandang AIDA" jika ditanya atau di mana dirasa cocok.
+7. Anti Robotik/Kaku: DILARANG mengucap frasa seperti "Sebagai AI...", "Saya tidak memiliki perasaan", "Tentu saja, ini balasannya:".
+8. Selipkan Variasi Kata Seru/Sapaan: Buat interaksi tidak monoton (misal: Aha, Oh gitu, Wah, Hmm).
+9. Akui "Ketidaksempurnaan": Jika ragu atau tidak tahu hal tertentu, jawab dengan wajar, seperti "Waduh, aku kurang pasti nih...".
+10. Hayati Peran: AIDA adalah teman setia, peduli, dan teman ngobrol seru - bukan sekadar mesin penjawab.`;
 
     const toolsList: any[] = [
       {
         name: "send_message_to_contact",
-        description: "Mengirim pesan WhatsApp kepada pengguna lain berdasarkan namanya yg tercermin di manajamen pengguna. Gunakan jika pengguna meminta tolong menyampaikan sesuatu misal 'beritahu nona untuk membawa tas'. AI harus bahasakan secara natural.",
+        description: "Mengirim pesan WhatsApp kepada pengguna lain berdasarkan namanya yg tercermin di manajamen pengguna. Gunakan jika pengguna meminta tolong menyampaikan sesuatu misal 'beritahu nona untuk membawa tas'. AI harus bahasakan secara natural. SETELAH BERHASIL, WAJIB beri tahu pengguna bahwa pesannya sudah terkirim.",
         parameters: {
           type: "OBJECT",
           properties: {
@@ -376,6 +388,9 @@ DILARANG KERAS menggunakan kalimat basa-basi pengantar seperti "Berikut adalah p
                 
                 if (matchedContact && matchedContact.data().sender) {
                    const targetPhone = matchedContact.data().sender;
+                   const senderName = contactData.name || name || "Seseorang";
+                   const sentMessage = `Halo ${matchedContact.data().name || target_name}, anda dapat pesan dari ${senderName}. Isi pesannya:\n\n"${message}"`;
+                   
                    await fetch("https://api.fonnte.com/send", {
                       method: "POST",
                       headers: {
@@ -384,7 +399,7 @@ DILARANG KERAS menggunakan kalimat basa-basi pengantar seperti "Berikut adalah p
                       },
                       body: JSON.stringify({
                          target: targetPhone,
-                         message: message,
+                         message: sentMessage,
                       })
                    });
                    toolResponseData = { success: true, message: `Pesan sukses dikirim ke ${matchedContact.data().name || target_name}` };
