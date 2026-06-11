@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import * as adminImport from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-const admin = adminImport.default || adminImport;
+const admin = (adminImport as any).default || adminImport;
 
 // Helper to initialize and get db lazily
 let _db: FirebaseFirestore.Firestore | null = null;

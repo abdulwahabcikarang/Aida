@@ -31,7 +31,7 @@ function OverviewTab() {
   const [cronLoading, setCronLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/stats")
+    fetch("/api/status?type=stats")
       .then((r) => r.json())
       .then((data) => {
         setStats(data);
@@ -1395,7 +1395,7 @@ function RandomTopicsTab() {
     if (!bulkText.trim()) return alert("Teks tidak boleh kosong");
     setBulkLoading(true);
     try {
-      const res = await fetch("/api/random-topics-bulk", {
+      const res = await fetch("/api/random-topics?bulk=true", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawText: bulkText, startDate: bulkStartDate }),

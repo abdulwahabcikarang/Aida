@@ -1,7 +1,7 @@
 import * as adminImport from "firebase-admin";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-const admin = adminImport.default || adminImport;
+const admin = (adminImport as any).default || adminImport;
 
 let _db: FirebaseFirestore.Firestore | null = null;
 
@@ -35,6 +35,27 @@ export default async function handler(req: any, res: any) {
 
   try {
     const db = getDb();
+
+    if (req.query.type === 'stats') {
+      const [chatsSnap, remindersSnap, notesSnap] = await Promise.all([
+         db.collection("chats").count().get(),
+         db.collection("reminders").count().get(),
+         db.collection("notes").count().get()
+      ]);
+
+      let totalMessages = 0;
+      const chatsDataSnap = await db.collection("chats").get();
+      chatsDataSnap.docs.forEach(d => {
+         totalMessages += (d.data().history?.length || 0);
+      });
+
+      return res.status(200).json({ 
+        totalMessages, 
+        activeUsers: chatsSnap.data().count, 
+        totalReminders: remindersSnap.data().count, 
+        totalNotes: notesSnap.data().count 
+      });
+    }
     
     // Uji koneksi dengan menulis dan membaca dari koleksi "system_status"
     const testRef = db.collection("system_status").doc("connection_test");
@@ -60,6 +81,9 @@ export default async function handler(req: any, res: any) {
     }
 
   } catch (error: any) {
+    if (req.query.type === 'stats') {
+      return res.status(500).json({ error: error.message || String(error) });
+    }
     return res.status(500).json({ 
       status: "ERROR", 
       firebase: "KONEKSI GAGAL (DISCONNECTED)",

@@ -6,6 +6,12 @@ import statusHandler from "./api/status";
 import settingsHandler from "./api/settings";
 import contactsHandler from "./api/contacts";
 import cronHandler from "./api/cron";
+import broadcastHandler from "./api/dashboard-broadcast";
+import journalsHandler from "./api/dashboard-journals";
+import logsHandler from "./api/dashboard-logs";
+import notesHandler from "./api/dashboard-notes";
+import remindersHandler from "./api/dashboard-reminders";
+import randomTopicsHandler from "./api/random-topics";
 
 async function startServer() {
   const app = express();
@@ -25,6 +31,12 @@ async function startServer() {
   app.all("/api/contacts", contactsHandler);
   app.all("/api/status", statusHandler);
   app.all("/api/cron", cronHandler);
+  app.all("/api/dashboard-broadcast", broadcastHandler);
+  app.all("/api/dashboard-journals", journalsHandler);
+  app.all("/api/dashboard-logs", logsHandler);
+  app.all("/api/dashboard-notes", notesHandler);
+  app.all("/api/dashboard-reminders", remindersHandler);
+  app.all("/api/random-topics", randomTopicsHandler);
 
   // Webhook for Fonnte (WhatsApp) - works on both /api/webhook and /webhook
   app.all("/api/webhook", webhookHandler);
