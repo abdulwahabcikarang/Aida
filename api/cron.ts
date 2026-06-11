@@ -129,6 +129,18 @@ export default async function handler(req: any, res: any) {
     });
     const jakartaTime = new Date(jakartaTimeStr);
     const dateString = `${jakartaTime.getFullYear()}-${jakartaTime.getMonth() + 1}-${jakartaTime.getDate()}`;
+    const isoDateString = `${jakartaTime.getFullYear()}-${String(jakartaTime.getMonth() + 1).padStart(2, "0")}-${String(jakartaTime.getDate()).padStart(2, "0")}`;
+
+    let todayTopic = "";
+    try {
+      const topicDoc = await db
+        .collection("random_topics")
+        .doc(isoDateString)
+        .get();
+      if (topicDoc.exists) {
+        todayTopic = topicDoc.data()?.topic || "";
+      }
+    } catch (e) {}
 
     // Jika jam sesuai dengan yang di-setting (Cron berjalan setiap menit)
     if (reportEnabled && jakartaTime.getHours() === reportTime) {
@@ -229,6 +241,8 @@ Namanya: ${userName}.
 Waktu di Jakarta: ${jakartaTime.toLocaleString("id-ID")}.
 
 ${recentNotes ? `Sebagai konteks tambahan, pengguna memiliki catatan mengenai: ${recentNotes}. Gunakan jika dirasa relevan atau bisa diabaikan.` : ""}
+
+${todayTopic ? `TOPIK PEMBICARAAN HARI INI: ${todayTopic}\nAnda DIWAJIBKAN menggunakan topik ini sebagai bahan obrolan sekarang.` : "Jika tidak ada topik khusus, tanyakan keseharian biasa."}
 
 Instruksi PENTING:
 - Tuliskan pesan singkat yang kasual, santai, seolah-olah chat dari asisten teman sendiri tanpa pembukaan kaku (JANGAN gunakan sapaan formal atau tulisan "Halo AIDA di sini"). Langsung saja seperti mengajak ngobrol.
@@ -403,15 +417,13 @@ Instruksi PENTING:
       }
     }
 
-    return res
-      .status(200)
-      .json({
-        status: "ok",
-        remindersSent: sentCount,
-        morningReportsSent: reportSent,
-        randomGreetingsSent: randomGreetingsSent,
-        eveningJournalSent: eveningJournalSent,
-      });
+    return res.status(200).json({
+      status: "ok",
+      remindersSent: sentCount,
+      morningReportsSent: reportSent,
+      randomGreetingsSent: randomGreetingsSent,
+      eveningJournalSent: eveningJournalSent,
+    });
   } catch (error: any) {
     console.error("Cron Error:", error);
     return res.status(500).json({ error: error.message || String(error) });
