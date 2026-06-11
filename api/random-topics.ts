@@ -1,5 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import * as adminImport from "firebase-admin";
+import { GoogleGenAI } from "@google/genai";
 
 const admin = (adminImport as any).default || adminImport;
 let _db: FirebaseFirestore.Firestore | null = null;
@@ -34,7 +35,6 @@ export default async function handler(req: any, res: any) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "API Key Gemini tidak ditemukan." });
       
-      const { GoogleGenAI } = require("@google/genai");
       const ai = new GoogleGenAI({ apiKey });
 
       const prompt = `Saya memiliki sekumpulan ide atau catatan acak. Tolong ekstrak teks ini menjadi daftar topik harian yang bisa ditanyakan oleh asisten AI kepada pengguna. 
