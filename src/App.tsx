@@ -982,6 +982,149 @@ function ContactsTab() {
           </label>
         </div>
 
+        <div className="bg-white border rounded-xl p-4 shadow-sm border-gray-200 mt-4 mb-4">
+          <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            ⏰ Alarm Pengingat AI
+          </h3>
+          <div className="space-y-4">
+            {(!editing.alarms || editing.alarms.length === 0) && (
+              <p className="text-sm text-gray-500 italic">
+                Belum ada alarm untuk kontak ini.
+              </p>
+            )}
+            {editing.alarms?.map((al: any, idx: number) => (
+              <div
+                key={idx}
+                className="bg-gray-50 p-3 rounded-lg border border-gray-200 flex flex-col gap-3 relative"
+              >
+                <button
+                  onClick={() => {
+                    const newAlarms = [...editing.alarms];
+                    newAlarms.splice(idx, 1);
+                    setEditing({ ...editing, alarms: newAlarms });
+                  }}
+                  className="absolute top-2 right-3 text-red-500 text-xs font-bold hover:underline"
+                >
+                  ✕ Hapus
+                </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pr-8">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Jam & Menit
+                    </label>
+                    <input
+                      type="time"
+                      value={al.time || ""}
+                      onChange={(e) => {
+                        const newAlarms = [...editing.alarms];
+                        newAlarms[idx] = { ...al, time: e.target.value };
+                        setEditing({ ...editing, alarms: newAlarms });
+                      }}
+                      className="w-full p-2 text-sm border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Pesan / Keterangan (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Ingatkan minum obat"
+                      value={al.message || ""}
+                      onChange={(e) => {
+                        const newAlarms = [...editing.alarms];
+                        newAlarms[idx] = { ...al, message: e.target.value };
+                        setEditing({ ...editing, alarms: newAlarms });
+                      }}
+                      className="w-full p-2 text-sm border rounded"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                      Hari
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "Setiap Hari",
+                        "Senin",
+                        "Selasa",
+                        "Rabu",
+                        "Kamis",
+                        "Jumat",
+                        "Sabtu",
+                        "Minggu",
+                      ].map((day) => {
+                        const daysArr = Array.isArray(al.days) ? al.days : [];
+                        const isChecked = daysArr.includes(day);
+                        return (
+                          <label
+                            key={day}
+                            className="flex items-center gap-1.5 text-xs bg-white border border-gray-300 px-2 py-1.5 rounded cursor-pointer hover:bg-blue-50 select-none"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let newDays = [...daysArr];
+                                if (e.target.checked) {
+                                  if (day === "Setiap Hari")
+                                    newDays = ["Setiap Hari"];
+                                  else {
+                                    newDays = newDays.filter(
+                                      (d) => d !== "Setiap Hari",
+                                    );
+                                    if (!newDays.includes(day))
+                                      newDays.push(day);
+                                  }
+                                } else {
+                                  newDays = newDays.filter((d) => d !== day);
+                                }
+                                const newAlarms = [...editing.alarms];
+                                newAlarms[idx] = { ...al, days: newDays };
+                                setEditing({ ...editing, alarms: newAlarms });
+                              }}
+                              className="accent-blue-600"
+                            />
+                            <span
+                              className={
+                                isChecked
+                                  ? "font-bold text-blue-700"
+                                  : "text-gray-700"
+                              }
+                            >
+                              {day}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                const cur = editing.alarms || [];
+                setEditing({
+                  ...editing,
+                  alarms: [
+                    ...cur,
+                    {
+                      id: Date.now().toString(),
+                      time: "08:00",
+                      days: ["Setiap Hari"],
+                      message: "",
+                    },
+                  ],
+                });
+              }}
+              className="mt-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-4 py-2 rounded-lg border border-blue-200 transition-colors"
+            >
+              + Tambah Alarm
+            </button>
+          </div>
+        </div>
+
         <button
           onClick={saveContact}
           disabled={saving}
