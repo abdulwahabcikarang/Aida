@@ -351,7 +351,79 @@ Instruksi PENTING:
     }
 
     // ============================================
-    // 2. PENGIRIMAN PENGINGAT (REMINDERS)
+    // 1d. ALARM PENGINGAT HARIAN (DARI KONTAK)
+    // ============================================
+    let alarmsSent = 0;
+    const hariIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const currentHari = hariIndo[jakartaTime.getDay()];
+    const currentJamStr = String(jakartaTime.getHours()).padStart(2, "0") + ":" + String(jakartaTime.getMinutes()).padStart(2, "0");
+
+    const chatAlertSnapshot = await db.collection("chats").get();
+    for (const doc of chatAlertSnapshot.docs) {
+      const chatData = doc.data();
+      if (chatData.sender && chatData.alarms && Array.isArray(chatData.alarms)) {
+        let updatedAlarms = false;
+        const userAlarms = chatData.alarms;
+
+        for (const al of userAlarms) {
+          const daysArr = Array.isArray(al.days) ? al.days : [];
+          const isMatchDay = daysArr.includes("Setiap Hari") || daysArr.includes(currentHari);
+          const isMatchTime = al.time === currentJamStr;
+
+          if (isMatchDay && isMatchTime && al.lastSentDate !== dateString) {
+            try {
+              const userName = chatData.name || "Bapak/Ibu";
+              const alarmMsgText = al.message || "Ada pengingat dari sistem.";
+
+              const prompt = `Ini adalah alarm otomatis untuk kontak.
+Nama: ${userName}.
+Waktu saat ini (Jakarta): ${jakartaTime.toLocaleString("id-ID")}.
+Judul/Pesan Alarm: ${alarmMsgText}
+
+Instruksi:
+Tuliskan satu pesan WA yang sangat suportif, hangat, ramah khas asisten pribadi yang memanggil pengguna dengan namanya. Ingatkan mengenai hal yang disebutkan di "Pesan Alarm" dengan natural. Sertakan emoji.
+JANGAN gunakan intro "Tentu, ini draf pesannya". Langsung tulis draf jadinya.`;
+
+              const genAi = getAi();
+              const response = await genAi.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: prompt,
+                config: { temperature: 0.8 },
+              });
+
+              const botMessage =
+                response.text ||
+                `Halo ${userName}, ini pengingat untukmu: ${alarmMsgText} ⏰ Semangat ya!`;
+
+              await fetch("https://api.fonnte.com/send", {
+                method: "POST",
+                headers: {
+                  Authorization: fonnteToken,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  target: chatData.sender,
+                  message: botMessage,
+                }),
+              });
+
+              al.lastSentDate = dateString;
+              updatedAlarms = true;
+              alarmsSent++;
+            } catch (e) {
+              console.error(\`Gagal kirim Alarm Harian ke \${chatData.sender}\`, e);
+            }
+          }
+        }
+
+        if (updatedAlarms) {
+          await doc.ref.update({ alarms: userAlarms });
+        }
+      }
+    }
+
+    // ============================================
+    // 2. PENGIRIMAN PENGINGAT (REMINDERS) APLIKASI
     // ============================================
     const snapshot = await db
       .collection("reminders")
@@ -419,6 +491,7 @@ Instruksi PENTING:
 
     return res.status(200).json({
       status: "ok",
+      alarmsSent: alarmsSent,
       remindersSent: sentCount,
       morningReportsSent: reportSent,
       randomGreetingsSent: randomGreetingsSent,
