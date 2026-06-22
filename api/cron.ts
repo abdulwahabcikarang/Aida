@@ -354,20 +354,36 @@ Instruksi PENTING:
     // 1d. ALARM PENGINGAT HARIAN (DARI KONTAK)
     // ============================================
     let alarmsSent = 0;
-    const hariIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const hariIndo = [
+      "Minggu",
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+    ];
     const currentHari = hariIndo[jakartaTime.getDay()];
-    const currentJamStr = String(jakartaTime.getHours()).padStart(2, "0") + ":" + String(jakartaTime.getMinutes()).padStart(2, "0");
+    const currentJamStr =
+      String(jakartaTime.getHours()).padStart(2, "0") +
+      ":" +
+      String(jakartaTime.getMinutes()).padStart(2, "0");
 
     const chatAlertSnapshot = await db.collection("chats").get();
     for (const doc of chatAlertSnapshot.docs) {
       const chatData = doc.data();
-      if (chatData.sender && chatData.alarms && Array.isArray(chatData.alarms)) {
+      if (
+        chatData.sender &&
+        chatData.alarms &&
+        Array.isArray(chatData.alarms)
+      ) {
         let updatedAlarms = false;
         const userAlarms = chatData.alarms;
 
         for (const al of userAlarms) {
           const daysArr = Array.isArray(al.days) ? al.days : [];
-          const isMatchDay = daysArr.includes("Setiap Hari") || daysArr.includes(currentHari);
+          const isMatchDay =
+            daysArr.includes("Setiap Hari") || daysArr.includes(currentHari);
           const isMatchTime = al.time === currentJamStr;
 
           if (isMatchDay && isMatchTime && al.lastSentDate !== dateString) {
@@ -411,7 +427,10 @@ JANGAN gunakan intro "Tentu, ini draf pesannya". Langsung tulis draf jadinya.`;
               updatedAlarms = true;
               alarmsSent++;
             } catch (e) {
-              console.error(\`Gagal kirim Alarm Harian ke \${chatData.sender}\`, e);
+              console.error(
+                `Gagal kirim Alarm Harian ke ${chatData.sender}`,
+                e,
+              );
             }
           }
         }
@@ -440,7 +459,7 @@ JANGAN gunakan intro "Tentu, ini draf pesannya". Langsung tulis draf jadinya.`;
       return reminderTime <= now;
     });
 
-    if (dueDocs.length === 0 && reportSent === 0) {
+    if (dueDocs.length === 0 && reportSent === 0 && alarmsSent === 0 && randomGreetingsSent === 0 && eveningJournalSent === 0) {
       return res
         .status(200)
         .json({ status: "ok", sent: 0, message: "Tidak ada tugas." });
